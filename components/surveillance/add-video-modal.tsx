@@ -5,9 +5,9 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,8 +20,6 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { FileVideo, Upload, Video, X, Zap } from "lucide-react"
-import { useLoading } from "@/components/ui/walking-loader"
-import type { VideoUploadStatus } from "@/lib/api"
 
 interface AddVideoModalProps {
   open: boolean
@@ -35,7 +33,6 @@ interface AddVideoModalProps {
     startTime: string
     endTime: string
     fastMode: boolean
-    onProgress?: (status: VideoUploadStatus) => void
   }) => void | Promise<void>
 }
 
@@ -132,7 +129,6 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
   const [dragActive, setDragActive] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { showLoader, updateLoader, hideLoader } = useLoading()
 
   useEffect(() => {
     if (open) {
@@ -177,9 +173,10 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
   }, [selectedFile])
 
   const computedSchedule = useMemo(() => computeSchedule(startTime, durationHours), [durationHours, startTime])
+
   const submitDisabledReason = useMemo(() => {
     if (isSubmitting) {
-      return "Upload already in progress."
+      return "Adding video to the queue..."
     }
 
     if (isDetectingDuration) {
@@ -224,19 +221,20 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
     e.stopPropagation()
     setDragActive(false)
     setSubmitError(null)
-    
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+
+    if (e.dataTransfer.files?.[0]) {
       const file = e.dataTransfer.files[0]
-      if (file.type === "video/mp4" || file.type === "video/x-msvideo" || file.name.endsWith(".avi")) {
+      if (file.type === "video/mp4" || file.type === "video/x-msvideo" || file.name.toLowerCase().endsWith(".avi")) {
         setSelectedFile(file)
       }
     }
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+    if (e.target.files?.[0]) {
       setSubmitError(null)
       setSelectedFile(e.target.files[0])
+      e.target.value = ""
     }
   }
 
@@ -245,7 +243,6 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
 
     setSubmitError(null)
     setIsSubmitting(true)
-    showLoader(fastMode ? "Uploading video in fast mode..." : "Uploading video...", 0)
 
     try {
       await onAddVideo?.({
@@ -255,15 +252,11 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
         startTime,
         endTime: computedSchedule.endTime,
         fastMode,
-        onProgress: ({ message, progressPercent }) => {
-          updateLoader({ label: message, progress: progressPercent })
-        },
       })
       handleClose()
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Failed to upload video.")
     } finally {
-      hideLoader()
       setIsSubmitting(false)
     }
   }
@@ -279,6 +272,9 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
     setSubmitError(null)
     setIsDetectingDuration(false)
     setFastMode(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
     onOpenChange(false)
   }
 
@@ -329,7 +325,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
               className={`relative border-2 border-dashed rounded-lg p-6 transition-colors ${
                 dragActive 
                   ? "border-primary bg-primary/5" 
-                  : selectedFile 
+                    : selectedFile
                     ? "border-primary/50 bg-muted/50" 
                     : "border-border hover:border-primary/50"
               }`}
@@ -345,7 +341,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
                 onChange={handleFileChange}
                 className="hidden"
               />
-              
+
               {selectedFile ? (
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -426,7 +422,6 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
             />
           </div>
           
-          {/* Time Coverage */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Start Time</label>
@@ -517,7 +512,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
             disabled={!selectedFile || !locationId || !date || !startTime || !computedSchedule || isSubmitting || isDetectingDuration}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
-            {isSubmitting ? "Uploading..." : isDetectingDuration ? "Reading file..." : "Add Video"}
+            {isSubmitting ? "Adding video..." : isDetectingDuration ? "Reading file..." : "Add Video"}
           </Button>
         </DialogFooter>
       </DialogContent>

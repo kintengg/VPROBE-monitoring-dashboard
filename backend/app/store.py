@@ -922,12 +922,18 @@ def _traffic_series_from_samples(
     samples: list[dict[str, Any]],
     first_seen_by_track: dict[str, tuple[datetime, str]],
     root_window_start: datetime,
+    location_names: list[str],
 ) -> list[dict[str, Union[float, int, str]]]:
     if not buckets:
         return []
 
     series: list[dict[str, Union[float, int, str]]] = [
-        {"time": label, "cumulativeUniquePedestrians": 0, "averageVisiblePedestrians": 0.0}
+        {
+            "time": label,
+            "cumulativeUniquePedestrians": 0,
+            "averageVisiblePedestrians": 0.0,
+            **{location: 0 for location in location_names},
+        }
         for label, _ in buckets
     ]
 
@@ -937,6 +943,7 @@ def _traffic_series_from_samples(
     visible_totals = [0.0 for _ in series]
     sample_counts = [0 for _ in series]
     first_seen_counts = [0 for _ in series]
+    first_seen_counts_by_location = {location: [0 for _ in series] for location in location_names}
 
     for sample in samples:
         observed_at = sample["observedAt"]
@@ -949,21 +956,30 @@ def _traffic_series_from_samples(
         sample_counts[bucket_index] += 1
 
     baseline_unique_total = 0
-    for observed_at, _location in first_seen_by_track.values():
+    baseline_unique_by_location = {location: 0 for location in location_names}
+    for observed_at, location in first_seen_by_track.values():
         if observed_at < root_window_start or observed_at >= final_boundary:
             continue
         if observed_at < first_bucket:
             baseline_unique_total += 1
+            if location in baseline_unique_by_location:
+                baseline_unique_by_location[location] += 1
             continue
         bucket_index = _bucket_index(observed_at, first_bucket, bucket_seconds, len(series))
         if bucket_index is not None:
             first_seen_counts[bucket_index] += 1
+            if location in first_seen_counts_by_location:
+                first_seen_counts_by_location[location][bucket_index] += 1
 
     running_total = baseline_unique_total
+    running_total_by_location = dict(baseline_unique_by_location)
     for index, point in enumerate(series):
         running_total += first_seen_counts[index]
         point["cumulativeUniquePedestrians"] = running_total
         point["averageVisiblePedestrians"] = round(visible_totals[index] / sample_counts[index], 2) if sample_counts[index] else 0.0
+        for location in location_names:
+            running_total_by_location[location] += first_seen_counts_by_location[location][index]
+            point[location] = running_total_by_location[location]
 
     return series
 
@@ -1138,7 +1154,16 @@ def dashboard_traffic(
 
     root_window_start, _root_window_end, _root_bucket_minutes = _resolve_root_window(resolved_date, time_range, observation_times)
     buckets, bucket_span, bucket_meta = _build_bucket_plan(resolved_date, time_range, observation_times, focus_time, zoom_level)
-    series = _traffic_series_from_samples(buckets, bucket_span, samples, first_seen_by_track, root_window_start)
+    active_location_ids = _active_location_ids(videos)
+    active_location_names = [location["name"] for location in state["locations"] if location["id"] in active_location_ids]
+    series = _traffic_series_from_samples(
+        buckets,
+        bucket_span,
+        samples,
+        first_seen_by_track,
+        root_window_start,
+        active_location_names,
+    )
 
     if buckets:
         window_start = buckets[0][1]
@@ -1147,12 +1172,11 @@ def dashboard_traffic(
         window_start = root_window_start
         window_end = root_window_start
 
-    active_location_ids = _active_location_ids(videos)
-    active_location_names = {location["name"] for location in state["locations"] if location["id"] in active_location_ids}
+    active_location_name_set = set(active_location_names)
     location_totals = [
         {"location": location, "totalPedestrians": total}
         for location, total in _location_unique_totals(first_seen_by_track, window_start, window_end)
-        if location in active_location_names
+        if location in active_location_name_set
     ]
 
     return {

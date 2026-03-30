@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { VideoGrid } from "@/components/surveillance/video-grid"
 import { EventFeed } from "@/components/surveillance/event-feed"
 import { AISearchBar } from "@/components/surveillance/ai-search-bar"
@@ -18,6 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { useUploadQueue } from "@/components/uploads/upload-queue-provider"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,12 +40,14 @@ import {
   getLocations,
   type EventRecord,
   type LocationRecord,
-  type VideoUploadStatus,
   updateLocation,
-  uploadVideo,
 } from "@/lib/api"
 
 export default function SurveillancePage() {
+  const { enqueueUploads, settledUploadsVersion } = useUploadQueue()
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [detectionMode, setDetectionMode] = useState(true)
   const [locationMenuOpen, setLocationMenuOpen] = useState(false)
   const [locationModalOpen, setLocationModalOpen] = useState(false)
@@ -95,6 +99,14 @@ export default function SurveillancePage() {
     void loadEvents()
   }, [loadEvents])
 
+  useEffect(() => {
+    if (settledUploadsVersion === 0) {
+      return
+    }
+
+    void Promise.all([loadLocations(), loadEvents()])
+  }, [loadEvents, loadLocations, settledUploadsVersion])
+
   const filteredLocations = useMemo(() => {
     if (!selectedDate) return locations
 
@@ -127,10 +139,23 @@ export default function SurveillancePage() {
     }
   }
 
-  const handleOpenAddVideo = (locationId?: string) => {
+  const handleOpenAddVideo = useCallback((locationId?: string) => {
     setSelectedUploadLocationId(locationId ?? "")
     setVideoModalOpen(true)
-  }
+  }, [])
+
+  useEffect(() => {
+    if (searchParams.get("openAddVideo") !== "1") {
+      return
+    }
+
+    handleOpenAddVideo()
+
+    const nextParams = new URLSearchParams(searchParams.toString())
+    nextParams.delete("openAddVideo")
+    const nextQuery = nextParams.toString()
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false })
+  }, [handleOpenAddVideo, pathname, router, searchParams])
 
   const handleOpenAddLocation = () => {
     setLocationMenuOpen(false)
@@ -201,21 +226,24 @@ export default function SurveillancePage() {
     }
   }
 
-  const handleAddVideo = async (data: {
+  const handleAddVideo = async (upload: {
     file: File
     locationId: string
     date: string
     startTime: string
     endTime: string
     fastMode: boolean
-    onProgress?: (status: VideoUploadStatus) => void
   }) => {
     try {
       setPageError(null)
-      await uploadVideo(data)
-      await Promise.all([loadLocations(), loadEvents()])
+      enqueueUploads([
+        {
+          ...upload,
+          locationName: locations.find((location) => location.id === upload.locationId)?.name ?? "Unknown location",
+        },
+      ])
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to upload video."
+      const message = error instanceof Error ? error.message : "Failed to queue video upload."
       setPageError(message)
       throw error
     }

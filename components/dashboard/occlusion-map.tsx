@@ -288,7 +288,7 @@ function buildLabelPlacements(plottedLocations: PlottedLocation[], mapDimensions
     })
 
     if (bestPlacement) {
-      placedRects.set(location.id, bestPlacement.rect)
+      placedRects.set(location.id, (bestPlacement as { rect: Rect; score: number }).rect)
     }
   })
 

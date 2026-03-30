@@ -5,6 +5,7 @@ import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { 
+  ListOrdered,
   LayoutDashboard, 
   Video, 
   User
@@ -12,6 +13,7 @@ import {
 
 const navItems = [
   { icon: Video, label: "Surveillance", href: "/" },
+  { icon: ListOrdered, label: "Queue", href: "/queue" },
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
 ]
 
@@ -39,7 +41,8 @@ export function Sidebar() {
         {navItems.map((item) => {
           const isActive = pathname === item.href || 
             (item.href === "/" && pathname.startsWith("/video")) ||
-            (item.href === "/dashboard" && pathname === "/search")
+            (item.href === "/dashboard" && pathname === "/search") ||
+            (item.href === "/queue" && pathname.startsWith("/queue"))
           return (
             <Link
               key={item.href}

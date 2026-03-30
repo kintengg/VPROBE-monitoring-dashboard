@@ -6,6 +6,8 @@ import {
   AreaChart,
   CartesianGrid,
   Legend,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -36,6 +38,7 @@ interface PedestrianChartProps {
 }
 
 const SERIES_COLORS = ["#22C55E", "#06B6D4", "#3B82F6", "#F59E0B", "#A855F7"]
+const RESERVED_SERIES_KEYS = new Set(["time", "cumulativeUniquePedestrians", "averageVisiblePedestrians"])
 
 function formatTimeRangeLabel(timeRange: string) {
   return timeRange
@@ -71,19 +74,26 @@ const CustomTooltip = ({
   metricKey,
 }: {
   active?: boolean
-  payload?: Array<{ name: string; value: number; color: string }>
+  payload?: Array<{ name?: string; value?: number | string; color?: string }>
   label?: string
   metricKey: PedestrianChartProps["metricKey"]
 }) => {
-  if (active && payload && payload.length) {
-    const entry = payload[0]
+  const entries = (payload ?? [])
+    .filter((entry): entry is { name: string; value: number | string; color?: string } => typeof entry?.name === "string" && entry.value != null)
+    .sort((left, right) => Number(right.value ?? 0) - Number(left.value ?? 0))
+
+  if (active && entries.length > 0) {
     return (
       <div className="rounded-2xl border border-border bg-popover p-3 shadow-elevated">
         <p className="mb-2 text-sm font-medium text-foreground">{label}</p>
-        <div className="flex items-center gap-2 text-sm">
-          <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-          <span className="text-muted-foreground">{entry.name}:</span>
-          <span className="font-medium text-foreground">{formatMetricValue(metricKey, Number(entry.value ?? 0))}</span>
+        <div className="space-y-2">
+          {entries.map((entry) => (
+            <div key={entry.name} className="flex items-center gap-2 text-sm">
+              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color ?? "#71717A" }} />
+              <span className="text-muted-foreground">{entry.name}:</span>
+              <span className="font-medium text-foreground">{formatMetricValue(metricKey, Number(entry.value ?? 0))}</span>
+            </div>
+          ))}
         </div>
       </div>
     )
@@ -112,6 +122,18 @@ export function PedestrianChart({
   onTimeSelect,
   onResetZoom,
 }: PedestrianChartProps) {
+  const locationSeries = Array.from(
+    new Set([
+      ...locationTotals.map((item) => item.location),
+      ...data.flatMap((point) => Object.keys(point).filter((key) => !RESERVED_SERIES_KEYS.has(key))),
+    ]),
+  ).map((location, index) => ({
+    key: location,
+    color: SERIES_COLORS[index % SERIES_COLORS.length],
+  }))
+
+  const showLocationBreakdown = metricKey === "cumulativeUniquePedestrians" && locationSeries.length > 0
+
   const totals = locationTotals.map((item, index) => ({
     location: item.location,
     count: item.totalPedestrians,
@@ -156,35 +178,63 @@ export function PedestrianChart({
           </div>
         ) : data.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }} onClick={handleChartClick}>
-              <defs>
-                <linearGradient id={`${metricKey}-gradient`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={seriesColor} stopOpacity={0.3} />
-                  <stop offset="95%" stopColor={seriesColor} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#27272A" vertical={false} />
-              <XAxis dataKey="time" stroke="#71717A" tick={{ fill: "#71717A", fontSize: 12 }} axisLine={{ stroke: "#27272A" }} />
-              <YAxis
-                stroke="#71717A"
-                tick={{ fill: "#71717A", fontSize: 12 }}
-                axisLine={{ stroke: "#27272A" }}
-                label={{ value: metricLabel, angle: -90, position: "insideLeft", fill: "#71717A", fontSize: 12 }}
-              />
-              <Tooltip content={<CustomTooltip metricKey={metricKey} />} />
-              <Legend wrapperStyle={{ paddingTop: "20px" }} formatter={(value) => <span className="text-sm text-foreground">{value}</span>} />
-              <Area
-                type="linear"
-                dataKey={metricKey}
-                name={metricLabel}
-                stroke={seriesColor}
-                strokeWidth={2.5}
-                fill={`url(#${metricKey}-gradient)`}
-                dot={false}
-                activeDot={{ r: 4, fill: seriesColor }}
-                cursor={canZoomIn ? "pointer" : "default"}
-              />
-            </AreaChart>
+            {showLocationBreakdown ? (
+              <LineChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }} onClick={handleChartClick}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272A" vertical={false} />
+                <XAxis dataKey="time" stroke="#71717A" tick={{ fill: "#71717A", fontSize: 12 }} axisLine={{ stroke: "#27272A" }} />
+                <YAxis
+                  stroke="#71717A"
+                  tick={{ fill: "#71717A", fontSize: 12 }}
+                  axisLine={{ stroke: "#27272A" }}
+                  label={{ value: metricLabel, angle: -90, position: "insideLeft", fill: "#71717A", fontSize: 12 }}
+                />
+                <Tooltip content={<CustomTooltip metricKey={metricKey} />} />
+                <Legend wrapperStyle={{ paddingTop: "20px" }} formatter={(value) => <span className="text-sm text-foreground">{value}</span>} />
+                {locationSeries.map((series) => (
+                  <Line
+                    key={series.key}
+                    type="monotone"
+                    dataKey={series.key}
+                    name={series.key}
+                    stroke={series.color}
+                    strokeWidth={2.5}
+                    dot={false}
+                    activeDot={{ r: 4, fill: series.color }}
+                    connectNulls
+                  />
+                ))}
+              </LineChart>
+            ) : (
+              <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }} onClick={handleChartClick}>
+                <defs>
+                  <linearGradient id={`${metricKey}-gradient`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={seriesColor} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={seriesColor} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272A" vertical={false} />
+                <XAxis dataKey="time" stroke="#71717A" tick={{ fill: "#71717A", fontSize: 12 }} axisLine={{ stroke: "#27272A" }} />
+                <YAxis
+                  stroke="#71717A"
+                  tick={{ fill: "#71717A", fontSize: 12 }}
+                  axisLine={{ stroke: "#27272A" }}
+                  label={{ value: metricLabel, angle: -90, position: "insideLeft", fill: "#71717A", fontSize: 12 }}
+                />
+                <Tooltip content={<CustomTooltip metricKey={metricKey} />} />
+                <Legend wrapperStyle={{ paddingTop: "20px" }} formatter={(value) => <span className="text-sm text-foreground">{value}</span>} />
+                <Area
+                  type="linear"
+                  dataKey={metricKey}
+                  name={metricLabel}
+                  stroke={seriesColor}
+                  strokeWidth={2.5}
+                  fill={`url(#${metricKey}-gradient)`}
+                  dot={false}
+                  activeDot={{ r: 4, fill: seriesColor }}
+                  cursor={canZoomIn ? "pointer" : "default"}
+                />
+              </AreaChart>
+            )}
           </ResponsiveContainer>
         ) : (
           <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground">

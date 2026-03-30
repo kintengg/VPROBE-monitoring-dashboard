@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import importlib.util
 import colorsys
+import importlib
+import importlib.util
 import re
+import sys
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -19,6 +21,38 @@ TRACK_THUMBNAIL_MAX_EDGE = 224
 CLOCK_TIME_FORMATS = ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M:%S %p")
 
 
+def _vendored_ultralytics_dir() -> Path:
+    return store.BACKEND_DIR / "vendor" / "ultralytics"
+
+
+def _prefer_vendored_ultralytics() -> Optional[Path]:
+    vendor_dir = _vendored_ultralytics_dir()
+    if not vendor_dir.exists():
+        return None
+
+    vendor_dir_str = str(vendor_dir.resolve())
+    if sys.path[:1] != [vendor_dir_str]:
+        try:
+            sys.path.remove(vendor_dir_str)
+        except ValueError:
+            pass
+        sys.path.insert(0, vendor_dir_str)
+        importlib.invalidate_caches()
+
+    return vendor_dir
+
+
+def _module_is_within(path_value: Optional[str], root: Optional[Path]) -> bool:
+    if not path_value or root is None:
+        return False
+
+    try:
+        Path(path_value).resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def resolve_model_path(model_name: Optional[str]) -> Optional[Path]:
     if not model_name:
         return None
@@ -33,20 +67,27 @@ def ultralytics_status() -> dict[str, Any]:
     model_info = store.get_model_info()
     model_name = model_info.get("currentModel")
     model_path = resolve_model_path(model_name)
+    vendor_dir = _prefer_vendored_ultralytics()
 
     installed = importlib.util.find_spec("ultralytics") is not None
     version = None
+    package_path = None
     if installed:
         try:
+            from ultralytics import __file__ as ultralytics_file
             from ultralytics import __version__ as ultralytics_version
 
             version = ultralytics_version
+            package_path = ultralytics_file
         except Exception:
             version = "installed"
 
     return {
         "installed": installed,
         "version": version,
+        "packagePath": package_path,
+        "vendoredPath": _backend_relative_path(vendor_dir),
+        "usingVendoredCopy": _module_is_within(package_path, vendor_dir),
         "preferredTag": PREFERRED_ULTRALYTICS_TAG,
         "fallbackTag": FALLBACK_ULTRALYTICS_TAG,
         "currentModel": model_name,
@@ -440,6 +481,7 @@ def run_video_inference(
     if model_path is None:
         raise RuntimeError("Could not resolve the active model path for inference.")
 
+    _prefer_vendored_ultralytics()
     from ultralytics import YOLO
 
     save_name = (video_record or {}).get("id") or video_path.stem

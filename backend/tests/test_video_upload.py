@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import threading
 from pathlib import Path
 
@@ -26,6 +27,43 @@ def configure_temp_storage(monkeypatch, tmp_path: Path) -> None:
     with store.UPLOAD_STATUS_LOCK:
         store.UPLOAD_STATUSES.clear()
         store.UPLOAD_CANCEL_REQUESTS.clear()
+
+
+def test_ultralytics_status_prefers_vendored_package(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    global_root = tmp_path / "global-site"
+    global_pkg = global_root / "ultralytics"
+    global_pkg.mkdir(parents=True, exist_ok=True)
+    (global_pkg / "__init__.py").write_text('__version__ = "0.0.global"\n', encoding="utf-8")
+    monkeypatch.syspath_prepend(str(global_root))
+
+    vendored_pkg = store.BACKEND_DIR / "vendor" / "ultralytics" / "ultralytics"
+    vendored_pkg.mkdir(parents=True, exist_ok=True)
+    (vendored_pkg / "__init__.py").write_text('__version__ = "9.9.vendored"\n', encoding="utf-8")
+
+    model_path = store.MODELS_DIR / "best.pt"
+    model_path.write_bytes(b"fake-model")
+    store.set_model(model_path.name)
+
+    original_sys_path = sys.path.copy()
+    for module_name in [name for name in list(sys.modules) if name == "ultralytics" or name.startswith("ultralytics.")]:
+        monkeypatch.delitem(sys.modules, module_name, raising=False)
+
+    try:
+        status = inference.ultralytics_status()
+    finally:
+        sys.path[:] = original_sys_path
+        for module_name in [name for name in list(sys.modules) if name == "ultralytics" or name.startswith("ultralytics.")]:
+            sys.modules.pop(module_name, None)
+
+    assert status["installed"] is True
+    assert status["version"] == "9.9.vendored"
+    assert status["vendoredPath"] == "vendor/ultralytics"
+    assert status["usingVendoredCopy"] is True
+    assert status["packagePath"].endswith("vendor/ultralytics/ultralytics/__init__.py")
+    assert status["modelExists"] is True
+    assert status["ready"] is True
 
 
 def test_box_xyxy_accepts_multi_value_tensor_like_objects() -> None:
@@ -365,7 +403,7 @@ def test_upload_video_cleans_up_when_inference_fails(monkeypatch, tmp_path: Path
     monkeypatch.setattr(
         inference,
         "run_video_inference",
-        lambda video_path, model_name=None, video_record=None, fast_mode=False: (_ for _ in ()).throw(RuntimeError("tracking failed")),
+        lambda video_path, model_name=None, video_record=None, fast_mode=False, progress_callback=None: (_ for _ in ()).throw(RuntimeError("tracking failed")),
     )
 
     before = store.load_state()
@@ -1603,8 +1641,9 @@ def test_dashboard_endpoints_only_surface_real_footage_and_neutral_empty_locatio
     assert traffic["isDrilldown"] is False
     assert traffic["locationTotals"][0] == {"location": "EDSA Sec Walk", "totalPedestrians": 3}
     whole_day_bucket = next(point for point in traffic["series"] if point["time"] == "10:00")
-    assert set(whole_day_bucket.keys()) == {"time", "cumulativeUniquePedestrians", "averageVisiblePedestrians"}
+    assert set(whole_day_bucket.keys()) == {"time", "cumulativeUniquePedestrians", "averageVisiblePedestrians", "EDSA Sec Walk"}
     assert whole_day_bucket["cumulativeUniquePedestrians"] == 3
+    assert whole_day_bucket["EDSA Sec Walk"] == 3
     assert whole_day_bucket["averageVisiblePedestrians"] == 1.0
 
     drilldown = drilldown_response.json()
@@ -1618,6 +1657,7 @@ def test_dashboard_endpoints_only_surface_real_footage_and_neutral_empty_locatio
     assert any(point["time"] == "10:00" for point in drilldown["series"])
     first_drill_bucket = next(point for point in drilldown["series"] if point["time"] == "10:00")
     assert first_drill_bucket["cumulativeUniquePedestrians"] == 3
+    assert first_drill_bucket["EDSA Sec Walk"] == 3
     assert first_drill_bucket["averageVisiblePedestrians"] == 1.0
 
     nested_drilldown = nested_drilldown_response.json()
@@ -1773,4 +1813,109 @@ def test_dashboard_traffic_uses_full_track_totals_instead_of_truncated_events(mo
     assert summary["totalUniquePedestrians"] == 8
     assert traffic["locationTotals"] == [{"location": "Kostka Walk", "totalPedestrians": 8}]
     assert whole_day_bucket["cumulativeUniquePedestrians"] == 8
+    assert whole_day_bucket["Kostka Walk"] == 8
     assert whole_day_bucket["averageVisiblePedestrians"] == 1.0
+
+
+def test_dashboard_traffic_returns_per_location_cumulative_series(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    state = store.seed_state()
+    state["videos"] = [
+        {
+            "id": "video-edsa-1",
+            "locationId": "edsa-sec-walk",
+            "location": "EDSA Sec Walk",
+            "timestamp": "10:00",
+            "date": "2026-03-17",
+            "startTime": "10:00",
+            "endTime": "10:10",
+            "gpsLat": 14.6397,
+            "gpsLng": 121.0775,
+            "pedestrianCount": 2,
+            "rawPath": None,
+            "processedPath": None,
+        },
+        {
+            "id": "video-kostka-1",
+            "locationId": "kostka-walk",
+            "location": "Kostka Walk",
+            "timestamp": "10:20",
+            "date": "2026-03-17",
+            "startTime": "10:20",
+            "endTime": "10:30",
+            "gpsLat": 14.6390,
+            "gpsLng": 121.0781,
+            "pedestrianCount": 1,
+            "rawPath": None,
+            "processedPath": None,
+        },
+    ]
+    state["events"] = [
+        {
+            "id": "event-edsa-1",
+            "type": "detection",
+            "location": "EDSA Sec Walk",
+            "timestamp": "10:01:00",
+            "description": "Pedestrian ID #1 detected at frame 10",
+            "videoId": "video-edsa-1",
+            "pedestrianId": 1,
+            "frame": 10,
+            "offsetSeconds": 1.0,
+        },
+        {
+            "id": "event-edsa-2",
+            "type": "detection",
+            "location": "EDSA Sec Walk",
+            "timestamp": "10:05:00",
+            "description": "Pedestrian ID #2 detected at frame 20",
+            "videoId": "video-edsa-1",
+            "pedestrianId": 2,
+            "frame": 20,
+            "offsetSeconds": 5.0,
+        },
+        {
+            "id": "event-kostka-1",
+            "type": "detection",
+            "location": "Kostka Walk",
+            "timestamp": "10:21:00",
+            "description": "Pedestrian ID #1 detected at frame 15",
+            "videoId": "video-kostka-1",
+            "pedestrianId": 1,
+            "frame": 15,
+            "offsetSeconds": 1.0,
+        },
+    ]
+    store.save_state(state)
+
+    with TestClient(main.app) as client:
+        traffic_response = client.get("/api/dashboard/traffic", params={"date": "2026-03-17", "timeRange": "whole-day"})
+        drilldown_response = client.get(
+            "/api/dashboard/traffic",
+            params={"date": "2026-03-17", "timeRange": "whole-day", "focusTime": "10:00", "zoomLevel": 1},
+        )
+
+    assert traffic_response.status_code == 200
+    assert drilldown_response.status_code == 200
+
+    traffic = traffic_response.json()
+    assert traffic["locationTotals"] == [
+        {"location": "EDSA Sec Walk", "totalPedestrians": 2},
+        {"location": "Kostka Walk", "totalPedestrians": 1},
+    ]
+
+    whole_day_bucket = next(point for point in traffic["series"] if point["time"] == "10:00")
+    assert whole_day_bucket["cumulativeUniquePedestrians"] == 3
+    assert whole_day_bucket["EDSA Sec Walk"] == 2
+    assert whole_day_bucket["Kostka Walk"] == 1
+
+    drilldown = drilldown_response.json()
+    ten_oclock_bucket = next(point for point in drilldown["series"] if point["time"] == "10:00")
+    ten_fifteen_bucket = next(point for point in drilldown["series"] if point["time"] == "10:15")
+
+    assert ten_oclock_bucket["cumulativeUniquePedestrians"] == 2
+    assert ten_oclock_bucket["EDSA Sec Walk"] == 2
+    assert ten_oclock_bucket["Kostka Walk"] == 0
+    assert ten_fifteen_bucket["cumulativeUniquePedestrians"] == 3
+    assert ten_fifteen_bucket["EDSA Sec Walk"] == 2
+    assert ten_fifteen_bucket["Kostka Walk"] == 1

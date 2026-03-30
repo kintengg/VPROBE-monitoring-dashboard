@@ -312,6 +312,12 @@ export function getVideoUploadStatus(uploadId: string) {
   return request<VideoUploadStatus>(`/api/videos/uploads/${uploadId}`)
 }
 
+export function cancelVideoUpload(uploadId: string) {
+  return request<VideoUploadStatus>(`/api/videos/uploads/${uploadId}/cancel`, {
+    method: "POST",
+  })
+}
+
 export function uploadVideo(payload: {
   file: File
   locationId: string

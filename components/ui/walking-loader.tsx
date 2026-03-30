@@ -1,14 +1,16 @@
 "use client"
 
+import { X } from "lucide-react"
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 
 interface WalkingLoaderProps {
   isVisible: boolean
   label: string
   progress?: number | null
+  onClose?: () => void
 }
 
-export function WalkingLoader({ isVisible, label, progress = null }: WalkingLoaderProps) {
+export function WalkingLoader({ isVisible, label, progress = null, onClose }: WalkingLoaderProps) {
   const [frame, setFrame] = useState(0)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   
@@ -89,7 +91,17 @@ export function WalkingLoader({ isVisible, label, progress = null }: WalkingLoad
 
   return (
     <div className="fixed inset-0 z-[80] flex items-start justify-center pt-32 pointer-events-none">
-      <div className="pointer-events-auto flex w-[min(92vw,32rem)] flex-col items-center gap-4 rounded-3xl border border-border bg-card p-6 shadow-elevated">
+      <div className="pointer-events-auto relative flex w-[min(92vw,32rem)] flex-col items-center gap-4 rounded-3xl border border-border bg-card p-6 shadow-elevated">
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+            aria-label="Hide loader"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : null}
         {/* Walking Animation Container */}
         <div className="relative w-20 h-24 flex items-center justify-center">
           {/* Ground line with moving dots */}
