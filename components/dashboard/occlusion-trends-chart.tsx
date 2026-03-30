@@ -72,6 +72,7 @@ export function OcclusionTrendsChart({
   onTimeSelect,
   onResetZoom,
 }: OcclusionTrendsChartProps) {
+  const timeLabelsById = new Map(data.map((point) => [point.id, point.time]))
   const subtitle = zoomLevel > 0
     ? `Zoom level ${zoomLevel} · ${windowStart ?? focusTime ?? "--"}–${windowEnd ?? "--"}`
     : `${formatDateLabel(selectedDate)} - ${formatRangeLabel(timeRange)}`
@@ -81,7 +82,10 @@ export function OcclusionTrendsChart({
       return
     }
 
-    const candidate = typeof state === "object" && state !== null && "activeLabel" in state ? (state as { activeLabel?: unknown }).activeLabel : undefined
+    const activePayload = typeof state === "object" && state !== null && "activePayload" in state
+      ? (state as { activePayload?: Array<{ payload?: TrafficPoint }> }).activePayload
+      : undefined
+    const candidate = activePayload?.find((entry) => typeof entry?.payload?.time === "string")?.payload?.time
     if (typeof candidate === "string" && candidate) {
       onTimeSelect(candidate)
     }
@@ -115,9 +119,15 @@ export function OcclusionTrendsChart({
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 10, right: 16, left: 0, bottom: 0 }} onClick={handleChartClick}>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272A" vertical={false} />
-              <XAxis dataKey="time" stroke="#71717A" tick={{ fill: "#71717A", fontSize: 12 }} axisLine={{ stroke: "#27272A" }} />
+              <XAxis
+                dataKey="id"
+                tickFormatter={(value) => timeLabelsById.get(String(value)) ?? String(value)}
+                stroke="#71717A"
+                tick={{ fill: "#71717A", fontSize: 12 }}
+                axisLine={{ stroke: "#27272A" }}
+              />
               <YAxis stroke="#71717A" tick={{ fill: "#71717A", fontSize: 12 }} axisLine={{ stroke: "#27272A" }} />
-              <Tooltip />
+              <Tooltip labelFormatter={(value) => timeLabelsById.get(String(value)) ?? String(value)} />
               <Legend wrapperStyle={{ paddingTop: "20px" }} formatter={(value) => <span className="text-sm text-foreground">{value}</span>} />
               {OCCLUSION_SERIES.map((series) => (
                 <Line

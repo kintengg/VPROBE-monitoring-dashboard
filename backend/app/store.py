@@ -929,12 +929,13 @@ def _traffic_series_from_samples(
 
     series: list[dict[str, Union[float, int, str]]] = [
         {
+            "id": bucket_start.isoformat(),
             "time": label,
             "cumulativeUniquePedestrians": 0,
             "averageVisiblePedestrians": 0.0,
             **{location: 0 for location in location_names},
         }
-        for label, _ in buckets
+        for label, bucket_start in buckets
     ]
 
     first_bucket = buckets[0][1]
@@ -993,8 +994,8 @@ def _occlusion_series_from_samples(
         return []
 
     series: list[dict[str, Union[float, str]]] = [
-        {"time": label, "Light": 0.0, "Moderate": 0.0, "Heavy": 0.0}
-        for label, _ in buckets
+        {"id": bucket_start.isoformat(), "time": label, "Light": 0.0, "Moderate": 0.0, "Heavy": 0.0}
+        for label, bucket_start in buckets
     ]
 
     first_bucket = buckets[0][1]

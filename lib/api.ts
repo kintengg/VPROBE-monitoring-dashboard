@@ -70,7 +70,7 @@ export interface LocationTotal {
   totalPedestrians: number
 }
 
-export type TrafficPoint = { time: string } & Record<string, string | number>
+export type TrafficPoint = { id: string; time: string } & Record<string, string | number>
 
 export interface TrafficResponse {
   timeRange: string

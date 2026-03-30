@@ -1635,13 +1635,15 @@ def test_dashboard_endpoints_only_surface_real_footage_and_neutral_empty_locatio
     traffic = traffic_response.json()
     assert traffic["timeRange"] == "whole-day"
     assert traffic["series"]
+    assert len({point["id"] for point in traffic["series"]}) == len(traffic["series"])
     assert traffic["bucketMinutes"] == 60
     assert traffic["zoomLevel"] == 0
     assert traffic["canZoomIn"] is True
     assert traffic["isDrilldown"] is False
     assert traffic["locationTotals"][0] == {"location": "EDSA Sec Walk", "totalPedestrians": 3}
     whole_day_bucket = next(point for point in traffic["series"] if point["time"] == "10:00")
-    assert set(whole_day_bucket.keys()) == {"time", "cumulativeUniquePedestrians", "averageVisiblePedestrians", "EDSA Sec Walk"}
+    assert set(whole_day_bucket.keys()) == {"id", "time", "cumulativeUniquePedestrians", "averageVisiblePedestrians", "EDSA Sec Walk"}
+    assert whole_day_bucket["id"].startswith("2026-03-17T10:00:00")
     assert whole_day_bucket["cumulativeUniquePedestrians"] == 3
     assert whole_day_bucket["EDSA Sec Walk"] == 3
     assert whole_day_bucket["averageVisiblePedestrians"] == 1.0
@@ -1671,10 +1673,12 @@ def test_dashboard_endpoints_only_surface_real_footage_and_neutral_empty_locatio
     assert nested_bucket["averageVisiblePedestrians"] == 1.0
 
     occlusion_trends = occlusion_trends_response.json()
+    assert len({point["id"] for point in occlusion_trends["series"]}) == len(occlusion_trends["series"])
     trend_bucket = next(point for point in occlusion_trends["series"] if point["time"] == "10:00")
     assert occlusion_trends["bucketMinutes"] == 15
     assert occlusion_trends["zoomLevel"] == 1
     assert occlusion_trends["canZoomIn"] is True
+    assert trend_bucket["id"].startswith("2026-03-17T10:00:00")
     assert trend_bucket["Light"] == pytest.approx(0.33, abs=0.01)
     assert trend_bucket["Moderate"] == pytest.approx(0.33, abs=0.01)
     assert trend_bucket["Heavy"] == 0
@@ -1899,6 +1903,7 @@ def test_dashboard_traffic_returns_per_location_cumulative_series(monkeypatch, t
     assert drilldown_response.status_code == 200
 
     traffic = traffic_response.json()
+    assert all("id" in point for point in traffic["series"])
     assert traffic["locationTotals"] == [
         {"location": "EDSA Sec Walk", "totalPedestrians": 2},
         {"location": "Kostka Walk", "totalPedestrians": 1},

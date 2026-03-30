@@ -38,7 +38,7 @@ interface PedestrianChartProps {
 }
 
 const SERIES_COLORS = ["#22C55E", "#06B6D4", "#3B82F6", "#F59E0B", "#A855F7"]
-const RESERVED_SERIES_KEYS = new Set(["time", "cumulativeUniquePedestrians", "averageVisiblePedestrians"])
+const RESERVED_SERIES_KEYS = new Set(["id", "time", "cumulativeUniquePedestrians", "averageVisiblePedestrians"])
 
 function formatTimeRangeLabel(timeRange: string) {
   return timeRange
@@ -74,18 +74,19 @@ const CustomTooltip = ({
   metricKey,
 }: {
   active?: boolean
-  payload?: Array<{ name?: string; value?: number | string; color?: string }>
+  payload?: Array<{ name?: string; value?: number | string; color?: string; payload?: TrafficPoint }>
   label?: string
   metricKey: PedestrianChartProps["metricKey"]
 }) => {
   const entries = (payload ?? [])
-    .filter((entry): entry is { name: string; value: number | string; color?: string } => typeof entry?.name === "string" && entry.value != null)
+    .filter((entry): entry is { name: string; value: number | string; color?: string; payload?: TrafficPoint } => typeof entry?.name === "string" && entry.value != null)
     .sort((left, right) => Number(right.value ?? 0) - Number(left.value ?? 0))
+  const displayLabel = entries[0]?.payload?.time ?? label
 
   if (active && entries.length > 0) {
     return (
       <div className="rounded-2xl border border-border bg-popover p-3 shadow-elevated">
-        <p className="mb-2 text-sm font-medium text-foreground">{label}</p>
+        <p className="mb-2 text-sm font-medium text-foreground">{displayLabel}</p>
         <div className="space-y-2">
           {entries.map((entry) => (
             <div key={entry.name} className="flex items-center gap-2 text-sm">
@@ -122,6 +123,7 @@ export function PedestrianChart({
   onTimeSelect,
   onResetZoom,
 }: PedestrianChartProps) {
+  const timeLabelsById = new Map(data.map((point) => [point.id, point.time]))
   const locationSeries = Array.from(
     new Set([
       ...locationTotals.map((item) => item.location),
@@ -148,7 +150,11 @@ export function PedestrianChart({
     if (!canZoomIn || typeof onTimeSelect !== "function") {
       return
     }
-    const candidate = typeof state === "object" && state !== null && "activeLabel" in state ? (state as { activeLabel?: unknown }).activeLabel : undefined
+
+    const activePayload = typeof state === "object" && state !== null && "activePayload" in state
+      ? (state as { activePayload?: Array<{ payload?: TrafficPoint }> }).activePayload
+      : undefined
+    const candidate = activePayload?.find((entry) => typeof entry?.payload?.time === "string")?.payload?.time
     if (typeof candidate === "string" && candidate) {
       onTimeSelect(candidate)
     }
@@ -181,7 +187,13 @@ export function PedestrianChart({
             {showLocationBreakdown ? (
               <LineChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }} onClick={handleChartClick}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272A" vertical={false} />
-                <XAxis dataKey="time" stroke="#71717A" tick={{ fill: "#71717A", fontSize: 12 }} axisLine={{ stroke: "#27272A" }} />
+                <XAxis
+                  dataKey="id"
+                  tickFormatter={(value) => timeLabelsById.get(String(value)) ?? String(value)}
+                  stroke="#71717A"
+                  tick={{ fill: "#71717A", fontSize: 12 }}
+                  axisLine={{ stroke: "#27272A" }}
+                />
                 <YAxis
                   stroke="#71717A"
                   tick={{ fill: "#71717A", fontSize: 12 }}
@@ -213,7 +225,13 @@ export function PedestrianChart({
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272A" vertical={false} />
-                <XAxis dataKey="time" stroke="#71717A" tick={{ fill: "#71717A", fontSize: 12 }} axisLine={{ stroke: "#27272A" }} />
+                <XAxis
+                  dataKey="id"
+                  tickFormatter={(value) => timeLabelsById.get(String(value)) ?? String(value)}
+                  stroke="#71717A"
+                  tick={{ fill: "#71717A", fontSize: 12 }}
+                  axisLine={{ stroke: "#27272A" }}
+                />
                 <YAxis
                   stroke="#71717A"
                   tick={{ fill: "#71717A", fontSize: 12 }}
