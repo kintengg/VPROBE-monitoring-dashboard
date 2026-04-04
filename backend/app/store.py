@@ -30,6 +30,9 @@ PTSI_OCCLUSION_WEIGHTS = {0: 1, 1: 2, 2: 3}
 PTSI_CONGESTION_WEIGHT = 0.85
 PTSI_OCCLUSION_WEIGHT = 0.15
 PTSI_ROI_TESTING_CAPACITY_PER_FULL_FRAME = 24.0
+SEMANTIC_MIN_SCORE = 0.18
+SEMANTIC_POSSIBLE_MATCH_SCORE = 0.28
+SEMANTIC_STRONG_MATCH_SCORE = 0.45
 PTSI_LOS_DESCRIPTIONS = {
     "A": "very high pedestrian space, free movement",
     "B": "high pedestrian space, comfortable movement",
@@ -2574,6 +2577,36 @@ def _build_track_result(
     }
 
 
+def _interpolate_confidence(score: float, *, low_score: float, high_score: float, low_confidence: int, high_confidence: int) -> int:
+    if high_score <= low_score:
+        return high_confidence
+    ratio = max(0.0, min(1.0, (score - low_score) / (high_score - low_score)))
+    return int(round(low_confidence + ratio * (high_confidence - low_confidence)))
+
+
+def _semantic_confidence(semantic_score: float) -> int:
+    score = max(0.0, float(semantic_score))
+    if score <= SEMANTIC_MIN_SCORE:
+        return 35
+    if score < SEMANTIC_POSSIBLE_MATCH_SCORE:
+        return _interpolate_confidence(
+            score,
+            low_score=SEMANTIC_MIN_SCORE,
+            high_score=SEMANTIC_POSSIBLE_MATCH_SCORE,
+            low_confidence=35,
+            high_confidence=59,
+        )
+    if score < SEMANTIC_STRONG_MATCH_SCORE:
+        return _interpolate_confidence(
+            score,
+            low_score=SEMANTIC_POSSIBLE_MATCH_SCORE,
+            high_score=SEMANTIC_STRONG_MATCH_SCORE,
+            low_confidence=60,
+            high_confidence=96,
+        )
+    return 96
+
+
 def _semantic_track_matches(
     query: str,
     tracks: list[dict[str, Any]],
@@ -2666,7 +2699,7 @@ def _track_results(
             continue
         score = _track_candidate_score(track, terms, region_requirements, soft_terms)
         semantic_score = float((semantic_matches.get(str(track.get("id") or "")) or {}).get("semanticScore") or 0.0)
-        if semantic_score >= 0.18:
+        if semantic_score >= SEMANTIC_MIN_SCORE:
             score += semantic_score * 12.0
         scored_tracks.append((score, track, video))
 
@@ -2683,7 +2716,11 @@ def _track_results(
         return []
 
     positively_scored_tracks = [item for item in scored_tracks if item[0] > 0]
-    semantic_positive_tracks = [item for item in scored_tracks if float((semantic_matches.get(str(item[1].get("id") or "")) or {}).get("semanticScore") or 0.0) >= 0.18]
+    semantic_positive_tracks = [
+        item
+        for item in scored_tracks
+        if float((semantic_matches.get(str(item[1].get("id") or "")) or {}).get("semanticScore") or 0.0) >= SEMANTIC_MIN_SCORE
+    ]
     if query.strip() and not positively_scored_tracks and not semantic_positive_tracks:
         return []
 
@@ -2692,9 +2729,9 @@ def _track_results(
         for _score, track, video in semantic_positive_tracks[:5]:
             semantic_match = semantic_matches.get(str(track.get("id") or "")) or {}
             semantic_score = float(semantic_match.get("semanticScore") or 0.0)
-            confidence = max(58, min(98, int(round(semantic_score * 100.0))))
+            confidence = _semantic_confidence(semantic_score)
             crop_label = str(semantic_match.get("cropLabel") or "representative")
-            possible_match = semantic_score < 0.28
+            possible_match = semantic_score < SEMANTIC_POSSIBLE_MATCH_SCORE
             reason = f"Semantic appearance match from the {crop_label} crop."
             semantic_results.append(
                 _build_track_result(

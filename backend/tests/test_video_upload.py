@@ -40,6 +40,14 @@ def test_semantic_search_configures_openmp_compatibility_env(monkeypatch) -> Non
     assert os.environ["KMP_DUPLICATE_LIB_OK"] == "TRUE"
 
 
+def test_semantic_confidence_scales_with_match_strength() -> None:
+    assert store._semantic_confidence(0.18) == 35
+    assert store._semantic_confidence(0.24) == 49
+    assert store._semantic_confidence(0.28) == 60
+    assert store._semantic_confidence(0.41) == 88
+    assert store._semantic_confidence(0.52) == 96
+
+
 def test_ultralytics_status_prefers_vendored_package(monkeypatch, tmp_path: Path) -> None:
     configure_temp_storage(monkeypatch, tmp_path)
 
@@ -921,6 +929,7 @@ def test_search_endpoint_returns_semantic_track_matches_without_gemini(monkeypat
     assert body[0]["id"] == "track-semantic"
     assert body[0]["matchStrategy"] == "semantic"
     assert body[0]["possibleMatch"] is False
+    assert body[0]["confidence"] == 88
     assert body[0]["semanticScore"] == 0.41
     assert body[0]["thumbnailPath"].endswith("track-12-late.jpg")
     assert body[0]["frame"] == 20
