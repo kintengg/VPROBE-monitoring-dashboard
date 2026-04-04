@@ -12,6 +12,23 @@ function normalizeResultText(value?: string | null) {
   return (value ?? "").replace(/\s+/g, " ").trim().toLowerCase()
 }
 
+function semanticPercent(value?: number | null) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null
+  }
+  return `${Math.round(value * 100)}%`
+}
+
+function resultBadgeLabel(result: SearchResult) {
+  if (result.matchStrategy === "semantic") {
+    return result.possibleMatch ? "Possible semantic match" : "Semantic match"
+  }
+  if (result.matchStrategy === "event") {
+    return "Event match"
+  }
+  return "AI match"
+}
+
 function SearchContent() {
   const searchParams = useSearchParams()
   const query = searchParams.get("q")?.trim() ?? ""
@@ -31,7 +48,7 @@ function SearchContent() {
 
       stageTimer = setTimeout(() => {
         if (!cancelled) {
-          updateLoader({ label: "Scanning deduplicated pedestrian tracks and asking Gemini to rank likely matches..." })
+          updateLoader({ label: "Comparing representative pedestrian crops and ranking likely matches..." })
         }
       }, 900)
 
@@ -170,6 +187,13 @@ function SearchResultCard({
   }, [result.offsetSeconds, result.videoId])
   const showImage = Boolean(thumbnailUrl && !thumbnailFailed)
   const showPreviewVideo = Boolean(!showImage && previewUrl && !previewFailed)
+  const semanticScoreText = semanticPercent(result.semanticScore)
+  const badgeLabel = resultBadgeLabel(result)
+  const badgeClassName = result.matchStrategy === "semantic"
+    ? "bg-cyan-500/90 text-white"
+    : result.matchStrategy === "event"
+      ? "bg-amber-500/90 text-black"
+      : "bg-primary/90 text-primary-foreground"
 
   return (
     <div className="flex gap-4 p-4 rounded-xl bg-card border border-border hover:border-primary/30 transition-all group">
@@ -210,9 +234,9 @@ function SearchResultCard({
         )}
 
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3">
-          <div className="inline-flex items-center gap-1 rounded-full bg-primary/90 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-primary-foreground">
+          <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${badgeClassName}`}>
             <ScanSearch className="h-3 w-3" />
-            AI match
+            {badgeLabel}
           </div>
         </div>
 
@@ -237,6 +261,20 @@ function SearchResultCard({
           <div>
             <h3 className="text-lg font-medium text-foreground">{result.location}</h3>
             <p className="text-sm text-primary">{result.matchReason}</p>
+            {result.matchStrategy === "semantic" ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                {semanticScoreText ? (
+                  <span className="rounded-full bg-cyan-500/10 px-2.5 py-1 font-medium text-cyan-700 dark:text-cyan-300">
+                    Semantic score {semanticScoreText}
+                  </span>
+                ) : null}
+                {result.possibleMatch ? (
+                  <span className="rounded-full bg-amber-500/10 px-2.5 py-1 font-medium text-amber-700 dark:text-amber-300">
+                    Lower-confidence appearance match
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
             {showAppearanceSummary ? (
               <p className="mt-2 text-sm text-muted-foreground">{result.appearanceSummary}</p>
             ) : null}
@@ -273,8 +311,13 @@ function SearchResultCard({
               </div>
             ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-1 whitespace-nowrap">
-            <span className="text-xs font-medium text-primary whitespace-nowrap">Potential Match</span>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <div className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 whitespace-nowrap">
+              <span className="text-xs font-medium text-primary whitespace-nowrap">{badgeLabel}</span>
+            </div>
+            <div className="rounded-full bg-secondary px-2.5 py-1 text-xs text-foreground">
+              Confidence {Math.max(0, Math.min(100, Math.round(result.confidence)))}%
+            </div>
           </div>
         </div>
 

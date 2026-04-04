@@ -358,6 +358,9 @@ def load_state() -> dict[str, Any]:
         if not isinstance(track.get("trajectorySamples"), list):
             track["trajectorySamples"] = _legacy_track_trajectory_samples(track)
             changed = True
+        if not isinstance(track.get("semanticCrops"), list):
+            track["semanticCrops"] = _legacy_track_semantic_crops(track)
+            changed = True
 
     if changed:
         save_state(state)
@@ -398,6 +401,30 @@ def resolve_video_source_path(video: Optional[dict[str, Any]]) -> Optional[Path]
         return processed_path
 
     return None
+
+
+def _legacy_track_semantic_crops(track: dict[str, Any]) -> list[dict[str, Any]]:
+    thumbnail_path = str(track.get("thumbnailPath") or "").strip()
+    if not thumbnail_path:
+        return []
+    return [
+        {
+            "label": "best",
+            "path": thumbnail_path,
+            "frame": track.get("bestFrame") or track.get("firstFrame"),
+            "timestamp": track.get("bestTimestamp") or track.get("firstTimestamp"),
+            "offsetSeconds": track.get("bestOffsetSeconds") if track.get("bestOffsetSeconds") is not None else track.get("firstOffsetSeconds"),
+        }
+    ]
+
+
+def _refresh_semantic_index(state: dict[str, Any]) -> None:
+    try:
+        from . import semantic_search
+
+        semantic_search.rebuild_index(state, backend_dir=BACKEND_DIR)
+    except Exception:
+        logger.exception("Semantic search index rebuild failed.")
 
 
 def delete_video_assets(video: Optional[dict[str, Any]]) -> None:
@@ -503,6 +530,7 @@ def delete_location(location_id: str) -> bool:
         if track.get("videoId") not in removed_video_ids and not (track.get("videoId") is None and track.get("location") == location["name"])
     ]
     save_state(state)
+    _refresh_semantic_index(state)
 
     for video in videos_to_delete:
         delete_video_assets(video)
@@ -561,6 +589,7 @@ def set_video_inference_result(
     state["pedestrianTracks"] = [track for track in state.get("pedestrianTracks", []) if track.get("videoId") != video_id]
     state["pedestrianTracks"].extend(pedestrian_tracks or [])
     save_state(state)
+    _refresh_semantic_index(state)
     return deepcopy(video)
 
 
@@ -573,6 +602,7 @@ def remove_video(video_id: str) -> bool:
     removed = len(state["videos"]) != original_video_count
     if removed:
         save_state(state)
+        _refresh_semantic_index(state)
     return removed
 
 
@@ -2500,8 +2530,21 @@ def _build_track_result(
     *,
     confidence: int,
     match_reason: str,
+    semantic_score: Optional[float] = None,
+    possible_match: bool = False,
+    match_strategy: str = "metadata",
+    thumbnail_path_override: Optional[str] = None,
+    timestamp_override: Optional[str] = None,
+    frame_override: Optional[int] = None,
+    offset_seconds_override: Optional[float] = None,
 ) -> dict[str, Any]:
-    timestamp = track.get("bestTimestamp") or track.get("firstTimestamp") or video.get("timestamp") or "Unknown Time"
+    timestamp = timestamp_override or track.get("bestTimestamp") or track.get("firstTimestamp") or video.get("timestamp") or "Unknown Time"
+    frame = frame_override if frame_override is not None else (track.get("bestFrame") if track.get("bestFrame") is not None else track.get("firstFrame"))
+    offset_seconds = (
+        offset_seconds_override
+        if offset_seconds_override is not None
+        else (track.get("bestOffsetSeconds") if track.get("bestOffsetSeconds") is not None else track.get("firstOffsetSeconds"))
+    )
     return {
         "id": str(track.get("id") or f"track-{video['id']}-{track.get('pedestrianId') or 'unknown'}"),
         "videoId": video["id"],
@@ -2511,9 +2554,13 @@ def _build_track_result(
         "confidence": max(0, min(100, int(confidence))),
         "matchReason": match_reason,
         "pedestrianId": track.get("pedestrianId"),
-        "frame": track.get("bestFrame") or track.get("firstFrame"),
-        "offsetSeconds": track.get("bestOffsetSeconds") or track.get("firstOffsetSeconds"),
-        "thumbnailPath": track.get("thumbnailPath"),
+        "frame": frame,
+        "offsetSeconds": offset_seconds,
+        "firstTimestamp": track.get("firstTimestamp"),
+        "lastTimestamp": track.get("lastTimestamp"),
+        "firstOffsetSeconds": track.get("firstOffsetSeconds"),
+        "lastOffsetSeconds": track.get("lastOffsetSeconds"),
+        "thumbnailPath": thumbnail_path_override or track.get("thumbnailPath"),
         "previewPath": video.get("processedPath") or video.get("rawPath"),
         "appearanceSummary": track.get("appearanceSummary"),
         "visualLabels": track.get("visualLabels") or [],
@@ -2521,7 +2568,42 @@ def _build_track_result(
         "visualLogos": track.get("visualLogos") or [],
         "visualText": track.get("visualText") or [],
         "visualSummary": track.get("visualSummary"),
+        "semanticScore": None if semantic_score is None else round(float(semantic_score), 4),
+        "possibleMatch": bool(possible_match),
+        "matchStrategy": match_strategy,
     }
+
+
+def _semantic_track_matches(
+    query: str,
+    tracks: list[dict[str, Any]],
+    videos_by_id: dict[str, dict[str, Any]],
+    required_location_id: str,
+) -> dict[str, dict[str, Any]]:
+    if not query.strip() or not tracks:
+        return {}
+
+    try:
+        from . import semantic_search
+
+        raw_matches = semantic_search.search_tracks(query, backend_dir=BACKEND_DIR, limit=MAX_AI_SEARCH_CANDIDATES * 2)
+    except Exception:
+        return {}
+
+    tracks_by_id = {str(track.get("id") or ""): track for track in tracks if track.get("id")}
+    filtered: dict[str, dict[str, Any]] = {}
+    for match in raw_matches:
+        track_id = str(match.get("id") or "")
+        track = tracks_by_id.get(track_id)
+        if track is None:
+            continue
+        video = videos_by_id.get(track.get("videoId") or "")
+        if video is None:
+            continue
+        if required_location_id and str(video.get("locationId") or "") != required_location_id:
+            continue
+        filtered[track_id] = match
+    return filtered
 
 
 def _ai_ranking_query(query: str, query_plan: dict[str, Any]) -> str:
@@ -2570,8 +2652,9 @@ def _track_results(
     region_requirements = query_plan.get("regionColorRequirements") or {}
     soft_terms = list(query_plan.get("softTerms") or [])
     required_location_id = str(query_plan.get("locationId") or "")
+    semantic_matches = _semantic_track_matches(query, tracks, videos_by_id, required_location_id)
 
-    if query.strip() and not terms and not region_requirements and not required_location_id:
+    if query.strip() and not terms and not region_requirements and not required_location_id and not semantic_matches:
         return []
 
     scored_tracks: list[tuple[float, dict[str, Any], dict[str, Any]]] = []
@@ -2582,6 +2665,9 @@ def _track_results(
         if required_location_id and str(video.get("locationId") or "") != required_location_id:
             continue
         score = _track_candidate_score(track, terms, region_requirements, soft_terms)
+        semantic_score = float((semantic_matches.get(str(track.get("id") or "")) or {}).get("semanticScore") or 0.0)
+        if semantic_score >= 0.18:
+            score += semantic_score * 12.0
         scored_tracks.append((score, track, video))
 
     scored_tracks.sort(
@@ -2597,8 +2683,36 @@ def _track_results(
         return []
 
     positively_scored_tracks = [item for item in scored_tracks if item[0] > 0]
-    if query.strip() and not positively_scored_tracks:
+    semantic_positive_tracks = [item for item in scored_tracks if float((semantic_matches.get(str(item[1].get("id") or "")) or {}).get("semanticScore") or 0.0) >= 0.18]
+    if query.strip() and not positively_scored_tracks and not semantic_positive_tracks:
         return []
+
+    if semantic_positive_tracks:
+        semantic_results: list[dict[str, Any]] = []
+        for _score, track, video in semantic_positive_tracks[:5]:
+            semantic_match = semantic_matches.get(str(track.get("id") or "")) or {}
+            semantic_score = float(semantic_match.get("semanticScore") or 0.0)
+            confidence = max(58, min(98, int(round(semantic_score * 100.0))))
+            crop_label = str(semantic_match.get("cropLabel") or "representative")
+            possible_match = semantic_score < 0.28
+            reason = f"Semantic appearance match from the {crop_label} crop."
+            semantic_results.append(
+                _build_track_result(
+                    track,
+                    video,
+                    confidence=confidence,
+                    match_reason=reason,
+                    semantic_score=semantic_score,
+                    possible_match=possible_match,
+                    match_strategy="semantic",
+                    thumbnail_path_override=semantic_match.get("matchedCropPath"),
+                    timestamp_override=semantic_match.get("timestamp"),
+                    frame_override=semantic_match.get("frame"),
+                    offset_seconds_override=semantic_match.get("offsetSeconds"),
+                )
+            )
+        if semantic_results:
+            return semantic_results[:5]
 
     fallback_candidates = positively_scored_tracks[:MAX_AI_SEARCH_CANDIDATES]
     candidates = fallback_candidates[:MAX_AI_SEARCH_CANDIDATES]
@@ -2617,6 +2731,7 @@ def _track_results(
             "visualSummary": track.get("visualSummary") or "",
             "occlusion": _occlusion_label(track.get("occlusionClass")) or "clear view",
             "thumbnailAvailable": bool(track.get("thumbnailPath")),
+            "semanticScore": round(float((semantic_matches.get(str(track.get("id") or "")) or {}).get("semanticScore") or 0.0), 4),
         }
         for _, track, video in candidates
         if track.get("id")
@@ -2643,6 +2758,7 @@ def _track_results(
                 video,
                 confidence=int(match.get("confidence", 0)),
                 match_reason=str(match.get("reason") or track.get("appearanceSummary") or "Potential visual match."),
+                match_strategy="metadata",
             )
         )
         used_ids.add(candidate_id)
@@ -2662,6 +2778,7 @@ def _track_results(
                 video,
                 confidence=fallback_confidence,
                 match_reason=str(track.get("appearanceSummary") or "Representative deduplicated pedestrian track."),
+                match_strategy="metadata",
             )
         )
     return fallback_results[:5]
@@ -2711,6 +2828,10 @@ def search_results(
                 "pedestrianId": event.get("pedestrianId"),
                 "frame": event.get("frame"),
                 "offsetSeconds": event.get("offsetSeconds"),
+                "firstTimestamp": None,
+                "lastTimestamp": None,
+                "firstOffsetSeconds": None,
+                "lastOffsetSeconds": None,
                 "thumbnailPath": None,
                 "previewPath": video.get("processedPath") or video.get("rawPath"),
                 "appearanceSummary": None,
@@ -2719,6 +2840,9 @@ def search_results(
                 "visualLogos": [],
                 "visualText": [],
                 "visualSummary": None,
+                "semanticScore": None,
+                "possibleMatch": False,
+                "matchStrategy": "event",
             }
         )
     if results:
@@ -2741,6 +2865,10 @@ def search_results(
                 "pedestrianId": None,
                 "frame": None,
                 "offsetSeconds": None,
+                "firstTimestamp": None,
+                "lastTimestamp": None,
+                "firstOffsetSeconds": None,
+                "lastOffsetSeconds": None,
                 "thumbnailPath": None,
                 "previewPath": video.get("processedPath") or video.get("rawPath"),
                 "appearanceSummary": None,
@@ -2749,6 +2877,9 @@ def search_results(
                 "visualLogos": [],
                 "visualText": [],
                 "visualSummary": None,
+                "semanticScore": None,
+                "possibleMatch": False,
+                "matchStrategy": "event",
             }
         )
     return fallback

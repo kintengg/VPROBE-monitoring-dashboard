@@ -193,6 +193,10 @@ export interface SearchResult {
   pedestrianId?: number | null
   frame?: number | null
   offsetSeconds?: number | null
+  firstTimestamp?: string | null
+  lastTimestamp?: string | null
+  firstOffsetSeconds?: number | null
+  lastOffsetSeconds?: number | null
   thumbnailPath?: string | null
   previewPath?: string | null
   appearanceSummary?: string | null
@@ -201,6 +205,9 @@ export interface SearchResult {
   visualLogos?: string[]
   visualText?: string[]
   visualSummary?: string | null
+  semanticScore?: number | null
+  possibleMatch?: boolean
+  matchStrategy?: "semantic" | "metadata" | "event" | null
 }
 
 export interface ModelInfo {

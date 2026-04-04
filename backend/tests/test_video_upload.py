@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib
 import json
 import logging
+import os
 import sys
 import threading
 from pathlib import Path
@@ -9,7 +11,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.app import inference, main, store
+from backend.app import inference, main, semantic_search, store
 
 
 def configure_temp_storage(monkeypatch, tmp_path: Path) -> None:
@@ -28,6 +30,14 @@ def configure_temp_storage(monkeypatch, tmp_path: Path) -> None:
     with store.UPLOAD_STATUS_LOCK:
         store.UPLOAD_STATUSES.clear()
         store.UPLOAD_CANCEL_REQUESTS.clear()
+
+
+def test_semantic_search_configures_openmp_compatibility_env(monkeypatch) -> None:
+    monkeypatch.delenv("KMP_DUPLICATE_LIB_OK", raising=False)
+
+    importlib.reload(semantic_search)
+
+    assert os.environ["KMP_DUPLICATE_LIB_OK"] == "TRUE"
 
 
 def test_ultralytics_status_prefers_vendored_package(monkeypatch, tmp_path: Path) -> None:
@@ -818,6 +828,155 @@ def test_search_endpoint_returns_ranked_pedestrian_track_matches(monkeypatch, tm
     assert body[0]["previewPath"] is None
     assert body[0]["appearanceSummary"].startswith("Representative crop suggests")
     assert body[0]["matchReason"] == "Head region and lower clothing are both described as blue."
+
+
+def test_search_endpoint_returns_semantic_track_matches_without_gemini(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    state = store.seed_state()
+    state["videos"] = [
+        {
+            "id": "video-1",
+            "locationId": "edsa-sec-walk",
+            "location": "EDSA Sec Walk",
+            "timestamp": "10:00",
+            "date": "2026-03-17",
+            "startTime": "10:00",
+            "endTime": "10:30",
+            "gpsLat": 14.6397,
+            "gpsLng": 121.0775,
+            "pedestrianCount": 1,
+            "rawPath": None,
+            "processedPath": None,
+        }
+    ]
+    state["pedestrianTracks"] = [
+        {
+            "id": "track-semantic",
+            "videoId": "video-1",
+            "pedestrianId": 12,
+            "location": "EDSA Sec Walk",
+            "firstTimestamp": "10:00:00 AM",
+            "lastTimestamp": "10:00:08 AM",
+            "bestTimestamp": "10:00:03 AM",
+            "firstFrame": 1,
+            "lastFrame": 24,
+            "bestFrame": 9,
+            "firstOffsetSeconds": 0.0,
+            "lastOffsetSeconds": 8.0,
+            "bestOffsetSeconds": 3.0,
+            "thumbnailPath": "storage/videos/processed/video-1/tracks/track-12.jpg",
+            "semanticCrops": [
+                {
+                    "label": "late",
+                    "path": "storage/videos/processed/video-1/tracks/track-12-late.jpg",
+                    "frame": 20,
+                    "timestamp": "10:00:06 AM",
+                    "offsetSeconds": 6.0,
+                }
+            ],
+            "appearanceHints": ["upper clothing appears white"],
+            "appearanceSummary": "Representative crop suggests upper clothing appears white.",
+            "occlusionClass": None,
+            "bestArea": 3900.0,
+        }
+    ]
+    store.save_state(state)
+
+    monkeypatch.setattr(
+        semantic_search,
+        "search_tracks",
+        lambda query, *, backend_dir, limit=24: [
+            {
+                "id": "track-semantic",
+                "videoId": "video-1",
+                "pedestrianId": 12,
+                "location": "EDSA Sec Walk",
+                "cropLabel": "late",
+                "matchedCropPath": "storage/videos/processed/video-1/tracks/track-12-late.jpg",
+                "frame": 20,
+                "offsetSeconds": 6.0,
+                "timestamp": "10:00:06 AM",
+                "semanticScore": 0.41,
+            }
+        ],
+    )
+
+    ranker_called = False
+
+    def fake_ranker(query: str, candidates: list[dict[str, object]]) -> list[dict[str, object]]:
+        nonlocal ranker_called
+        ranker_called = True
+        return []
+
+    monkeypatch.setattr(main.gemini, "rank_pedestrian_matches", fake_ranker)
+    monkeypatch.setattr(main.gemini, "parse_search_query", lambda query, locations: (_ for _ in ()).throw(RuntimeError("parser unavailable")))
+
+    with TestClient(main.app) as client:
+        response = client.get("/api/search", params={"query": "person with white shirt"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["id"] == "track-semantic"
+    assert body[0]["matchStrategy"] == "semantic"
+    assert body[0]["possibleMatch"] is False
+    assert body[0]["semanticScore"] == 0.41
+    assert body[0]["thumbnailPath"].endswith("track-12-late.jpg")
+    assert body[0]["frame"] == 20
+    assert body[0]["offsetSeconds"] == 6.0
+    assert body[0]["timestamp"] == "10:00:06 AM"
+    assert "late crop" in body[0]["matchReason"]
+    assert ranker_called is False
+
+
+def test_load_state_backfills_legacy_semantic_crops_from_thumbnail(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    state = store.seed_state()
+    state["videos"] = [
+        {
+            "id": "video-1",
+            "locationId": "edsa-sec-walk",
+            "location": "EDSA Sec Walk",
+            "timestamp": "10:00",
+            "date": "2026-03-17",
+            "startTime": "10:00",
+            "endTime": "10:30",
+            "gpsLat": 14.6397,
+            "gpsLng": 121.0775,
+            "pedestrianCount": 1,
+            "rawPath": None,
+            "processedPath": None,
+        }
+    ]
+    state["pedestrianTracks"] = [
+        {
+            "id": "track-legacy-semantic",
+            "videoId": "video-1",
+            "pedestrianId": 5,
+            "location": "EDSA Sec Walk",
+            "bestTimestamp": "10:00:02 AM",
+            "bestFrame": 4,
+            "bestOffsetSeconds": 2.0,
+            "thumbnailPath": "storage/videos/processed/video-1/tracks/track-5.jpg",
+            "appearanceSummary": "Representative crop suggests upper clothing appears red.",
+        }
+    ]
+    store.DATA_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+    loaded_state = store.load_state()
+    track = loaded_state["pedestrianTracks"][0]
+
+    assert track["semanticCrops"] == [
+        {
+            "label": "best",
+            "path": "storage/videos/processed/video-1/tracks/track-5.jpg",
+            "frame": 4,
+            "timestamp": "10:00:02 AM",
+            "offsetSeconds": 2.0,
+        }
+    ]
 
 
 def test_search_endpoint_expands_descriptive_color_queries_for_ai_ranking(monkeypatch, tmp_path: Path) -> None:
@@ -1843,8 +2002,8 @@ def test_dashboard_endpoints_only_surface_real_footage_and_neutral_empty_locatio
     assert edsa_sec_walk["hasFootage"] is True
     assert edsa_sec_walk["hasPTSIData"] is True
     assert edsa_sec_walk["state"] == "clear"
-    assert edsa_sec_walk["los"] == "A"
-    assert edsa_sec_walk["losDescription"] == "very high pedestrian space, free movement"
+    assert edsa_sec_walk["los"] == "B"
+    assert edsa_sec_walk["losDescription"] == "high pedestrian space, comfortable movement"
     assert edsa_sec_walk["score"] == pytest.approx(26.0, abs=0.01)
     assert edsa_sec_walk["mode"] == "strict-fhwa"
     assert edsa_sec_walk["averagePedestrians"] == pytest.approx(1.0, abs=0.01)
@@ -1870,8 +2029,8 @@ def test_dashboard_endpoints_only_surface_real_footage_and_neutral_empty_locatio
                 "moderatePercent": pytest.approx(50.0, abs=0.01),
                 "heavyPercent": pytest.approx(0.0, abs=0.01),
             },
-            "los": "A",
-            "losDescription": "very high pedestrian space, free movement",
+            "los": "B",
+            "losDescription": "high pedestrian space, comfortable movement",
         }
     ]
     assert kostka_walk["hasFootage"] is False

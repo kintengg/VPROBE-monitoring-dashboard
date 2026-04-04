@@ -179,6 +179,10 @@ class SearchResult(BaseModel):
     pedestrianId: Optional[int] = None
     frame: Optional[int] = None
     offsetSeconds: Optional[float] = None
+    firstTimestamp: Optional[str] = None
+    lastTimestamp: Optional[str] = None
+    firstOffsetSeconds: Optional[float] = None
+    lastOffsetSeconds: Optional[float] = None
     thumbnailPath: Optional[str] = None
     previewPath: Optional[str] = None
     appearanceSummary: Optional[str] = None
@@ -187,6 +191,9 @@ class SearchResult(BaseModel):
     visualLogos: list[str] = Field(default_factory=list)
     visualText: list[str] = Field(default_factory=list)
     visualSummary: Optional[str] = None
+    semanticScore: Optional[float] = None
+    possibleMatch: bool = False
+    matchStrategy: Optional[Literal["semantic", "metadata", "event"]] = None
 
 
 class ModelInfo(BaseModel):

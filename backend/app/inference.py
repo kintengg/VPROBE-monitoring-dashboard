@@ -18,6 +18,7 @@ FALLBACK_ULTRALYTICS_TAG = "v8.3.50"
 VIDEO_SUFFIXES = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
 MAX_TRACK_EVENTS = 50
 TRACK_THUMBNAIL_MAX_EDGE = 224
+SEMANTIC_CROP_LABEL_ORDER = ("best", "early", "mid", "late")
 CLOCK_TIME_FORMATS = ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M:%S %p")
 
 
@@ -300,6 +301,123 @@ def _save_track_thumbnail(image: Any, target: Path) -> Optional[str]:
     if not success:
         return None
     return _backend_relative_path(target)
+
+
+def _semantic_crop_sort_key(crop: dict[str, Any]) -> tuple[int, float]:
+    label = str(crop.get("label") or "")
+    try:
+        label_index = SEMANTIC_CROP_LABEL_ORDER.index(label)
+    except ValueError:
+        label_index = len(SEMANTIC_CROP_LABEL_ORDER)
+    try:
+        offset_seconds = float(crop.get("offsetSeconds") or 0.0)
+    except (TypeError, ValueError):
+        offset_seconds = 0.0
+    return label_index, offset_seconds
+
+
+def _upsert_semantic_crop(
+    track_summary: dict[str, Any],
+    *,
+    label: str,
+    image: Any,
+    save_dir: Path,
+    pedestrian_id: int,
+    frame_index: int,
+    timestamp: str,
+    offset_seconds: float,
+) -> None:
+    target = save_dir / "tracks" / f"track-{pedestrian_id}-{label}.jpg"
+    saved_path = _save_track_thumbnail(image, target)
+    if not saved_path:
+        return
+
+    semantic_crops = track_summary.setdefault("semanticCrops", [])
+    payload = {
+        "label": label,
+        "path": saved_path,
+        "frame": frame_index,
+        "timestamp": timestamp,
+        "offsetSeconds": offset_seconds,
+    }
+    existing_index = next((index for index, item in enumerate(semantic_crops) if str(item.get("label") or "") == label), None)
+    if existing_index is None:
+        semantic_crops.append(payload)
+    else:
+        semantic_crops[existing_index] = payload
+    semantic_crops.sort(key=_semantic_crop_sort_key)
+
+
+def _update_semantic_crops(
+    track_summary: dict[str, Any],
+    *,
+    image: Any,
+    save_dir: Path,
+    pedestrian_id: int,
+    frame_index: int,
+    timestamp: str,
+    offset_seconds: float,
+    is_new_best: bool,
+) -> None:
+    semantic_crops = track_summary.setdefault("semanticCrops", [])
+    by_label = {str(item.get("label") or ""): item for item in semantic_crops}
+
+    if "early" not in by_label:
+        _upsert_semantic_crop(
+            track_summary,
+            label="early",
+            image=image,
+            save_dir=save_dir,
+            pedestrian_id=pedestrian_id,
+            frame_index=frame_index,
+            timestamp=timestamp,
+            offset_seconds=offset_seconds,
+        )
+
+    _upsert_semantic_crop(
+        track_summary,
+        label="late",
+        image=image,
+        save_dir=save_dir,
+        pedestrian_id=pedestrian_id,
+        frame_index=frame_index,
+        timestamp=timestamp,
+        offset_seconds=offset_seconds,
+    )
+
+    mid_crop = next((item for item in semantic_crops if str(item.get("label") or "") == "mid"), None)
+    first_frame = int(track_summary.get("firstFrame") or frame_index)
+    midpoint = (first_frame + frame_index) / 2.0
+    current_distance = abs(frame_index - midpoint)
+    existing_distance = None
+    if mid_crop is not None:
+        try:
+            existing_distance = abs(float(mid_crop.get("frame") or frame_index) - midpoint)
+        except (TypeError, ValueError):
+            existing_distance = None
+    if mid_crop is None or existing_distance is None or current_distance <= existing_distance:
+        _upsert_semantic_crop(
+            track_summary,
+            label="mid",
+            image=image,
+            save_dir=save_dir,
+            pedestrian_id=pedestrian_id,
+            frame_index=frame_index,
+            timestamp=timestamp,
+            offset_seconds=offset_seconds,
+        )
+
+    if is_new_best:
+        _upsert_semantic_crop(
+            track_summary,
+            label="best",
+            image=image,
+            save_dir=save_dir,
+            pedestrian_id=pedestrian_id,
+            frame_index=frame_index,
+            timestamp=timestamp,
+            offset_seconds=offset_seconds,
+        )
 
 
 def _average_bgr(region: Any) -> Optional[tuple[float, float, float]]:
@@ -585,6 +703,7 @@ def run_video_inference(
                     "appearanceSummary": "Representative pedestrian track with limited appearance detail.",
                     "occlusionClass": occlusion_class,
                     "bestArea": 0.0,
+                    "semanticCrops": [],
                     "footPointNorm": None,
                     "trajectorySamples": [],
                 }
@@ -620,7 +739,19 @@ def run_video_inference(
                         ):
                             trajectory_sample[3] = occlusion_class
                 crop, crop_area = _crop_frame(frame_image, bounds)
-                if crop is not None and crop_area > float(track_summary.get("bestArea") or 0.0):
+                previous_best_area = float(track_summary.get("bestArea") or 0.0)
+                if crop is not None:
+                    _update_semantic_crops(
+                        track_summary,
+                        image=crop,
+                        save_dir=save_dir,
+                        pedestrian_id=track_id,
+                        frame_index=frame_index,
+                        timestamp=timestamp,
+                        offset_seconds=offset_seconds,
+                        is_new_best=crop_area > previous_best_area,
+                    )
+                if crop is not None and crop_area > previous_best_area:
                     track_summary["bestArea"] = crop_area
                     track_summary["bestFrame"] = frame_index
                     track_summary["bestTimestamp"] = timestamp

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "79403741",
+    "videoId": "7ce78b09",
+    "pedestrianId": 10,
+    "location": "EDSA Sec Walk",
+    "cropLabel": "best",
+    "matchedCropPath": "storage/videos/processed/7ce78b09/tracks/track-10.jpg",
+    "frame": 10,
+    "offsetSeconds": 0.6,
+    "timestamp": "12:11:11 PM",
+    "semanticScore": 0.3098681569099426
+  },
+  {
+    "id": "0b495ba2",
+    "videoId": "7ce78b09",
+    "pedestrianId": 13,
+    "location": "EDSA Sec Walk",
+    "cropLabel": "best",
+    "matchedCropPath": "storage/videos/processed/7ce78b09/tracks/track-13.jpg",
+    "frame": 1,
+    "offsetSeconds": 0.0,
+    "timestamp": "12:11:11 PM",
+    "semanticScore": 0.2953355312347412
+  },
+  {
+    "id": "a9eef64e",
+    "videoId": "4003efd0",
+    "pedestrianId": 236,
+    "location": "EDSA Sec Walk",
+    "cropLabel": "best",
+    "matchedCropPath": "storage/videos/processed/4003efd0/tracks/track-236.jpg",
+    "frame": 1271,
+    "offsetSeconds": 84.66,
+    "timestamp": "10:11:34 AM",
+    "semanticScore": 0.2867700755596161
+  },
+  {
+    "id": "b7c5dcaa",
+    "videoId": "7ce78b09",
+    "pedestrianId": 240,
+    "location": "EDSA Sec Walk",
+    "cropLabel": "best",
+    "matchedCropPath": "storage/videos/processed/7ce78b09/tracks/track-240.jpg",
+    "frame": 80,
+    "offsetSeconds": 5.27,
+    "timestamp": "12:11:16 PM",
+    "semanticScore": 0.2835822105407715
+  },
+  {
+    "id": "6678a000",
+    "videoId": "7ce78b09",
+    "pedestrianId": 5960,
+    "location": "EDSA Sec Walk",
+    "cropLabel": "best",
+    "matchedCropPath": "storage/videos/processed/7ce78b09/tracks/track-5960.jpg",
+    "frame": 3202,
+    "offsetSeconds": 213.36,
+    "timestamp": "12:14:44 PM",
+    "semanticScore": 0.2804490923881531
+  }
+]
