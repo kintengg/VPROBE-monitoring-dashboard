@@ -1,0 +1,110 @@
+[
+  {
+    "startOffsetSeconds": 0.0,
+    "endOffsetSeconds": 12.0,
+    "severity": "moderate",
+    "score": 39.35
+  },
+  {
+    "startOffsetSeconds": 12.0,
+    "endOffsetSeconds": 18.0,
+    "severity": "light",
+    "score": 32.24
+  },
+  {
+    "startOffsetSeconds": 18.0,
+    "endOffsetSeconds": 21.0,
+    "severity": "moderate",
+    "score": 40.67
+  },
+  {
+    "startOffsetSeconds": 21.0,
+    "endOffsetSeconds": 96.0,
+    "severity": "light",
+    "score": 30.69
+  },
+  {
+    "startOffsetSeconds": 96.0,
+    "endOffsetSeconds": 102.0,
+    "severity": "moderate",
+    "score": 36.21
+  },
+  {
+    "startOffsetSeconds": 102.0,
+    "endOffsetSeconds": 120.0,
+    "severity": "light",
+    "score": 28.69
+  },
+  {
+    "startOffsetSeconds": 120.0,
+    "endOffsetSeconds": 123.0,
+    "severity": "moderate",
+    "score": 37.64
+  },
+  {
+    "startOffsetSeconds": 123.0,
+    "endOffsetSeconds": 126.0,
+    "severity": "light",
+    "score": 28.69
+  },
+  {
+    "startOffsetSeconds": 126.0,
+    "endOffsetSeconds": 144.0,
+    "severity": "moderate",
+    "score": 53.37
+  },
+  {
+    "startOffsetSeconds": 144.0,
+    "endOffsetSeconds": 159.0,
+    "severity": "light",
+    "score": 28.69
+  },
+  {
+    "startOffsetSeconds": 159.0,
+    "endOffsetSeconds": 168.0,
+    "severity": "moderate",
+    "score": 35.03
+  },
+  {
+    "startOffsetSeconds": 168.0,
+    "endOffsetSeconds": 177.0,
+    "severity": "light",
+    "score": 27.5
+  },
+  {
+    "startOffsetSeconds": 177.0,
+    "endOffsetSeconds": 192.0,
+    "severity": "moderate",
+    "score": 44.08
+  },
+  {
+    "startOffsetSeconds": 192.0,
+    "endOffsetSeconds": 195.0,
+    "severity": "light",
+    "score": 22.76
+  },
+  {
+    "startOffsetSeconds": 195.0,
+    "endOffsetSeconds": 210.0,
+    "severity": "moderate",
+    "score": 60.96
+  },
+  {
+    "startOffsetSeconds": 210.0,
+    "endOffsetSeconds": 213.0,
+    "severity": "light",
+    "score": 27.5
+  },
+  {
+    "startOffsetSeconds": 213.0,
+    "endOffsetSeconds": 255.0,
+    "severity": "moderate",
+    "score": 65.8
+  },
+  {
+    "startOffsetSeconds": 255.0,
+    "endOffsetSeconds": 300.0,
+    "severity": "light",
+    "score": 28.69
+  }
+]

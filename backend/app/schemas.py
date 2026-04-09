@@ -245,4 +245,14 @@ class VideoUploadStatus(BaseModel):
     phase: Optional[Literal["queued", "tracking", "vision", "ptsi", "finalizing"]] = None
     videoId: Optional[str] = None
     error: Optional[str] = None
+    fileName: Optional[str] = None
+    locationId: Optional[str] = None
+    locationName: Optional[str] = None
+    date: Optional[str] = None
+    startTime: Optional[str] = None
+    endTime: Optional[str] = None
+    fastMode: Optional[bool] = None
+    createdAt: Optional[str] = None
+    startedAt: Optional[str] = None
+    completedAt: Optional[str] = None
     updatedAt: str

@@ -1,0 +1,92 @@
+[
+  {
+    "startOffsetSeconds": 0.0,
+    "endOffsetSeconds": 80.73,
+    "severity": "heavy",
+    "score": 96.15
+  },
+  {
+    "startOffsetSeconds": 80.73,
+    "endOffsetSeconds": 89.7,
+    "severity": "moderate",
+    "score": 61.18
+  },
+  {
+    "startOffsetSeconds": 89.7,
+    "endOffsetSeconds": 98.67,
+    "severity": "heavy",
+    "score": 75.62
+  },
+  {
+    "startOffsetSeconds": 98.67,
+    "endOffsetSeconds": 101.66,
+    "severity": "moderate",
+    "score": 61.41
+  },
+  {
+    "startOffsetSeconds": 101.66,
+    "endOffsetSeconds": 119.6,
+    "severity": "heavy",
+    "score": 93.82
+  },
+  {
+    "startOffsetSeconds": 119.6,
+    "endOffsetSeconds": 125.58,
+    "severity": "moderate",
+    "score": 60.4
+  },
+  {
+    "startOffsetSeconds": 125.58,
+    "endOffsetSeconds": 134.55,
+    "severity": "heavy",
+    "score": 83.94
+  },
+  {
+    "startOffsetSeconds": 134.55,
+    "endOffsetSeconds": 140.53,
+    "severity": "moderate",
+    "score": 58.24
+  },
+  {
+    "startOffsetSeconds": 140.53,
+    "endOffsetSeconds": 170.43,
+    "severity": "heavy",
+    "score": 94.53
+  },
+  {
+    "startOffsetSeconds": 170.43,
+    "endOffsetSeconds": 176.41,
+    "severity": "moderate",
+    "score": 64.19
+  },
+  {
+    "startOffsetSeconds": 176.41,
+    "endOffsetSeconds": 254.15,
+    "severity": "heavy",
+    "score": 96.21
+  },
+  {
+    "startOffsetSeconds": 254.15,
+    "endOffsetSeconds": 263.12,
+    "severity": "moderate",
+    "score": 64.78
+  },
+  {
+    "startOffsetSeconds": 263.12,
+    "endOffsetSeconds": 272.09,
+    "severity": "heavy",
+    "score": 82.53
+  },
+  {
+    "startOffsetSeconds": 272.09,
+    "endOffsetSeconds": 278.07,
+    "severity": "moderate",
+    "score": 63.29
+  },
+  {
+    "startOffsetSeconds": 278.07,
+    "endOffsetSeconds": 299.0,
+    "severity": "heavy",
+    "score": 94.18
+  }
+]

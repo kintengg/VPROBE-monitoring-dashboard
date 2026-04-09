@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { cancelVideoUpload, getVideoUploadStatus, uploadVideo, type VideoUploadStatus } from "@/lib/api"
+import { cancelVideoUpload, getVideoUploadHistory, getVideoUploadStatus, uploadVideo, type VideoUploadStatus } from "@/lib/api"
 import { WalkingLoader } from "@/components/ui/walking-loader"
 
 const MAX_CONCURRENT_UPLOADS = 2
@@ -152,6 +152,84 @@ function createQueuedItem(input: EnqueuedUploadInput): UploadQueueItem {
   }
 }
 
+function createHistoryQueueItemId(uploadId: string) {
+  return `history-${uploadId}`
+}
+
+function createUploadFromHistory(status: VideoUploadStatus): UploadQueueItem {
+  const updatedAt = status.updatedAt
+  const createdAt = status.createdAt ?? updatedAt
+
+  return {
+    id: createHistoryQueueItemId(status.uploadId),
+    file: null,
+    fileName: status.fileName ?? `Upload ${status.uploadId.slice(0, 8)}`,
+    fileSize: 0,
+    locationId: status.locationId ?? "",
+    locationName: status.locationName ?? "Unknown location",
+    date: status.date ?? "",
+    startTime: status.startTime ?? "",
+    endTime: status.endTime ?? "",
+    fastMode: Boolean(status.fastMode),
+    uploadId: status.uploadId,
+    state: status.state,
+    progressPercent: typeof status.progressPercent === "number" ? status.progressPercent : null,
+    message: status.message,
+    phase: status.phase ?? null,
+    videoId: status.videoId ?? null,
+    error: status.error ?? null,
+    createdAt,
+    updatedAt,
+    startedAt: status.startedAt ?? (status.state === "queued" ? null : createdAt),
+    completedAt: status.completedAt ?? (isTerminalState(status.state) ? updatedAt : null),
+    cancellationRequested: status.state === "cancelled",
+  }
+}
+
+function mergeUploadsWithHistory(currentUploads: UploadQueueItem[], history: VideoUploadStatus[]) {
+  const historyByUploadId = new Map(history.map((status) => [status.uploadId, status]))
+  const seenUploadIds = new Set<string>()
+
+  const mergedUploads = currentUploads.map((upload) => {
+    if (!upload.uploadId) {
+      return upload
+    }
+
+    const historyStatus = historyByUploadId.get(upload.uploadId)
+    if (!historyStatus) {
+      return upload
+    }
+
+    seenUploadIds.add(upload.uploadId)
+
+    return {
+      ...applyStatusToUpload(upload, historyStatus),
+      fileName: upload.fileName || historyStatus.fileName || upload.fileName,
+      locationId: upload.locationId || historyStatus.locationId || upload.locationId,
+      locationName: upload.locationName || historyStatus.locationName || upload.locationName,
+      date: upload.date || historyStatus.date || upload.date,
+      startTime: upload.startTime || historyStatus.startTime || upload.startTime,
+      endTime: upload.endTime || historyStatus.endTime || upload.endTime,
+      fastMode: upload.fastMode || Boolean(historyStatus.fastMode),
+      createdAt: upload.createdAt || historyStatus.createdAt || upload.updatedAt,
+      startedAt: upload.startedAt ?? historyStatus.startedAt ?? (historyStatus.state === "queued" ? null : historyStatus.updatedAt),
+      completedAt: isTerminalState(historyStatus.state)
+        ? historyStatus.completedAt ?? historyStatus.updatedAt
+        : upload.completedAt,
+    }
+  })
+
+  for (const historyStatus of history) {
+    if (seenUploadIds.has(historyStatus.uploadId)) {
+      continue
+    }
+
+    mergedUploads.push(createUploadFromHistory(historyStatus))
+  }
+
+  return mergedUploads
+}
+
 function serializeUpload(upload: UploadQueueItem): PersistedUploadQueueItem {
   const { file: _file, ...persistedUpload } = upload
   return persistedUpload
@@ -251,24 +329,47 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
     }
 
     hasHydratedRef.current = true
+    let isCancelled = false
+    let parsedUploads: UploadQueueItem[] = []
 
     try {
       const storedUploads = window.localStorage.getItem(UPLOAD_QUEUE_STORAGE_KEY)
-      if (!storedUploads) {
-        return
+      if (storedUploads) {
+        const restoredUploads = JSON.parse(storedUploads)
+        if (!Array.isArray(restoredUploads)) {
+          window.localStorage.removeItem(UPLOAD_QUEUE_STORAGE_KEY)
+        } else {
+          parsedUploads = restoredUploads.map(restoreUpload).filter((upload): upload is UploadQueueItem => upload !== null)
+        }
       }
-
-      const restoredUploads = JSON.parse(storedUploads)
-      if (!Array.isArray(restoredUploads)) {
-        window.localStorage.removeItem(UPLOAD_QUEUE_STORAGE_KEY)
-        return
-      }
-
-      const parsedUploads = restoredUploads.map(restoreUpload).filter((upload): upload is UploadQueueItem => upload !== null)
-      settledIdsRef.current = new Set(parsedUploads.filter((upload) => isTerminalState(upload.state)).map((upload) => upload.id))
-      setUploads(parsedUploads)
     } catch {
       window.localStorage.removeItem(UPLOAD_QUEUE_STORAGE_KEY)
+    }
+
+    settledIdsRef.current = new Set(parsedUploads.filter((upload) => isTerminalState(upload.state)).map((upload) => upload.id))
+    setUploads(parsedUploads)
+
+    const rehydrateBackendHistory = async () => {
+      try {
+        const history = await getVideoUploadHistory()
+        if (isCancelled || history.length === 0) {
+          return
+        }
+
+        setUploads((currentUploads) => {
+          const mergedUploads = mergeUploadsWithHistory(currentUploads, history)
+          settledIdsRef.current = new Set(mergedUploads.filter((upload) => isTerminalState(upload.state)).map((upload) => upload.id))
+          return mergedUploads
+        })
+      } catch {
+        // Keep local queue state when backend history is unavailable.
+      }
+    }
+
+    void rehydrateBackendHistory()
+
+    return () => {
+      isCancelled = true
     }
   }, [])
 

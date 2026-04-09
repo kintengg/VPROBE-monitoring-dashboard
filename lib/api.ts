@@ -255,6 +255,16 @@ export interface VideoUploadStatus {
   phase?: "queued" | "tracking" | "vision" | "ptsi" | "finalizing" | null
   videoId?: string | null
   error?: string | null
+  fileName?: string | null
+  locationId?: string | null
+  locationName?: string | null
+  date?: string | null
+  startTime?: string | null
+  endTime?: string | null
+  fastMode?: boolean | null
+  createdAt?: string | null
+  startedAt?: string | null
+  completedAt?: string | null
   updatedAt: string
 }
 
@@ -386,6 +396,10 @@ export function getVideo(videoId: string) {
 
 export function getVideoUploadStatus(uploadId: string) {
   return request<VideoUploadStatus>(`/api/videos/uploads/${uploadId}`)
+}
+
+export function getVideoUploadHistory() {
+  return request<VideoUploadStatus[]>("/api/videos/uploads/history")
 }
 
 export function cancelVideoUpload(uploadId: string) {
@@ -575,6 +589,6 @@ export async function downloadDashboardReport(date: string, timeRange: string): 
 
   return {
     blob,
-    filename: filenameMatch?.[1] ?? `dashboard-report-${date}-${timeRange}.md`,
+    filename: filenameMatch?.[1] ?? `${date}-${timeRange}-dashboard-report.zip`,
   }
 }

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import math
 import os
 import re
 import shutil
+import zipfile
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timedelta
@@ -22,6 +24,11 @@ MODELS_DIR = STORAGE_DIR / "models"
 RAW_VIDEOS_DIR = STORAGE_DIR / "videos" / "raw"
 PROCESSED_VIDEOS_DIR = STORAGE_DIR / "videos" / "processed"
 EXPORTS_DIR = STORAGE_DIR / "exports"
+PORTABLE_DIR = STORAGE_DIR / "portable"
+PORTABLE_VIDEOS_DIR = PORTABLE_DIR / "videos"
+QUEUE_HISTORY_JSON_FILE = PORTABLE_DIR / "queue_history.json"
+QUEUE_HISTORY_CSV_FILE = PORTABLE_DIR / "queue_history.csv"
+PORTABLE_MANIFEST_FILE = PORTABLE_DIR / "manifest.json"
 DATA_FILE = STORAGE_DIR / "dev_data.json"
 CLOCK_TIME_FORMATS = ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M:%S %p")
 MIN_DRILLDOWN_BUCKET_MINUTES = 5
@@ -176,6 +183,26 @@ MAX_AI_SEARCH_CANDIDATES = 24
 UPLOAD_STATUS_LOCK = Lock()
 UPLOAD_STATUSES: dict[str, dict[str, Any]] = {}
 UPLOAD_CANCEL_REQUESTS: set[str] = set()
+UPLOAD_HISTORY_CSV_FIELDS = (
+    "uploadId",
+    "state",
+    "progressPercent",
+    "message",
+    "phase",
+    "videoId",
+    "error",
+    "fileName",
+    "locationId",
+    "locationName",
+    "date",
+    "startTime",
+    "endTime",
+    "fastMode",
+    "createdAt",
+    "startedAt",
+    "completedAt",
+    "updatedAt",
+)
 
 
 def slugify(value: str) -> str:
@@ -184,6 +211,159 @@ def slugify(value: str) -> str:
 
 def _utc_timestamp() -> str:
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+
+def _format_video_offset_clock(offset_seconds: Any) -> str:
+    try:
+        total_seconds = max(0, int(float(offset_seconds)))
+    except (TypeError, ValueError):
+        total_seconds = 0
+
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def _optional_string(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _write_json_file(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _csv_cell_value(value: Any) -> Any:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def _csv_fieldnames(rows: list[dict[str, Any]], preferred: tuple[str, ...] = ()) -> list[str]:
+    fieldnames: list[str] = []
+    seen: set[str] = set()
+    for fieldname in preferred:
+        if fieldname not in seen:
+            fieldnames.append(fieldname)
+            seen.add(fieldname)
+    for row in rows:
+        for fieldname in row.keys():
+            if fieldname not in seen:
+                fieldnames.append(fieldname)
+                seen.add(fieldname)
+    return fieldnames
+
+
+def _csv_text(rows: list[dict[str, Any]], preferred: tuple[str, ...] = ()) -> str:
+    from io import StringIO
+
+    normalized_rows = [{key: _csv_cell_value(value) for key, value in row.items()} for row in rows]
+    fieldnames = _csv_fieldnames(normalized_rows, preferred)
+    if not fieldnames:
+        return ""
+
+    buffer = StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(normalized_rows)
+    return buffer.getvalue()
+
+
+def _write_csv_rows(path: Path, rows: list[dict[str, Any]], preferred: tuple[str, ...] = ()) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_csv_text(rows, preferred=preferred), encoding="utf-8")
+
+
+def _normalize_upload_status_record(record: Any) -> Optional[dict[str, Any]]:
+    if not isinstance(record, dict):
+        return None
+
+    upload_id = _optional_string(record.get("uploadId"))
+    state = _optional_string(record.get("state"))
+    message = _optional_string(record.get("message"))
+    updated_at = _optional_string(record.get("updatedAt"))
+    if not upload_id or not state or not message or not updated_at:
+        return None
+
+    raw_progress = record.get("progressPercent")
+    try:
+        progress_percent = None if raw_progress in (None, "") else max(0, min(100, int(round(float(raw_progress)))))
+    except (TypeError, ValueError):
+        progress_percent = None
+
+    return {
+        "uploadId": upload_id,
+        "state": state,
+        "progressPercent": progress_percent,
+        "message": message,
+        "phase": _optional_string(record.get("phase")),
+        "videoId": _optional_string(record.get("videoId")),
+        "error": _optional_string(record.get("error")),
+        "fileName": _optional_string(record.get("fileName")),
+        "locationId": _optional_string(record.get("locationId")),
+        "locationName": _optional_string(record.get("locationName")),
+        "date": _optional_string(record.get("date")),
+        "startTime": _optional_string(record.get("startTime")),
+        "endTime": _optional_string(record.get("endTime")),
+        "fastMode": bool(record.get("fastMode")) if record.get("fastMode") is not None else None,
+        "createdAt": _optional_string(record.get("createdAt")) or updated_at,
+        "startedAt": _optional_string(record.get("startedAt")),
+        "completedAt": _optional_string(record.get("completedAt")),
+        "updatedAt": updated_at,
+    }
+
+
+def _read_upload_status_history() -> list[dict[str, Any]]:
+    ensure_storage_layout()
+    if not QUEUE_HISTORY_JSON_FILE.exists():
+        return []
+
+    try:
+        payload = json.loads(QUEUE_HISTORY_JSON_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.exception("Failed to read upload history from %s", QUEUE_HISTORY_JSON_FILE)
+        return []
+
+    if isinstance(payload, dict):
+        raw_items = payload.get("statuses") or []
+    elif isinstance(payload, list):
+        raw_items = payload
+    else:
+        raw_items = []
+
+    statuses = [status for item in raw_items if (status := _normalize_upload_status_record(item)) is not None]
+    statuses.sort(key=lambda item: (item.get("createdAt") or item["updatedAt"], item["uploadId"]))
+    return statuses
+
+
+def _persist_upload_status_snapshot(statuses: list[dict[str, Any]]) -> None:
+    ordered_statuses = [status for item in statuses if (status := _normalize_upload_status_record(item)) is not None]
+    ordered_statuses.sort(key=lambda item: (item.get("createdAt") or item["updatedAt"], item["uploadId"]))
+    _write_json_file(QUEUE_HISTORY_JSON_FILE, ordered_statuses)
+    _write_csv_rows(QUEUE_HISTORY_CSV_FILE, ordered_statuses, preferred=UPLOAD_HISTORY_CSV_FIELDS)
+
+
+def _ensure_upload_statuses_loaded() -> None:
+    ensure_storage_layout()
+    with UPLOAD_STATUS_LOCK:
+        if UPLOAD_STATUSES:
+            return
+
+    statuses = _read_upload_status_history()
+    if not statuses:
+        return
+
+    with UPLOAD_STATUS_LOCK:
+        if UPLOAD_STATUSES:
+            return
+        UPLOAD_STATUSES.update({status["uploadId"]: status for status in statuses})
 
 
 def set_upload_status(
@@ -195,34 +375,58 @@ def set_upload_status(
     phase: Optional[str] = None,
     video_id: Optional[str] = None,
     error: Optional[str] = None,
+    file_name: Optional[str] = None,
+    location_id: Optional[str] = None,
+    location_name: Optional[str] = None,
+    date: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    fast_mode: Optional[bool] = None,
 ) -> dict[str, Any]:
+    _ensure_upload_statuses_loaded()
     normalized_progress = None if progress_percent is None else max(0, min(100, int(round(progress_percent))))
-    status = {
-        "uploadId": upload_id,
-        "state": state,
-        "progressPercent": normalized_progress,
-        "message": message,
-        "phase": phase,
-        "videoId": video_id,
-        "error": error,
-        "updatedAt": _utc_timestamp(),
-    }
+    timestamp = _utc_timestamp()
 
     with UPLOAD_STATUS_LOCK:
+        previous = UPLOAD_STATUSES.get(upload_id, {})
+        status = {
+            "uploadId": upload_id,
+            "state": state,
+            "progressPercent": normalized_progress,
+            "message": message,
+            "phase": phase if phase is not None else previous.get("phase"),
+            "videoId": video_id if video_id is not None else previous.get("videoId"),
+            "error": error if error is not None else (previous.get("error") if state == "error" else None),
+            "fileName": file_name if file_name is not None else previous.get("fileName"),
+            "locationId": location_id if location_id is not None else previous.get("locationId"),
+            "locationName": location_name if location_name is not None else previous.get("locationName"),
+            "date": date if date is not None else previous.get("date"),
+            "startTime": start_time if start_time is not None else previous.get("startTime"),
+            "endTime": end_time if end_time is not None else previous.get("endTime"),
+            "fastMode": fast_mode if fast_mode is not None else previous.get("fastMode"),
+            "createdAt": previous.get("createdAt") or timestamp,
+            "startedAt": previous.get("startedAt") or (timestamp if state != "queued" else None),
+            "completedAt": timestamp if state in {"complete", "error", "cancelled"} else previous.get("completedAt"),
+            "updatedAt": timestamp,
+        }
         UPLOAD_STATUSES[upload_id] = status
         if state in {"complete", "error", "cancelled"}:
             UPLOAD_CANCEL_REQUESTS.discard(upload_id)
+        snapshot = [deepcopy(item) for item in UPLOAD_STATUSES.values()]
 
+    _persist_upload_status_snapshot(snapshot)
     return deepcopy(status)
 
 
 def get_upload_status(upload_id: str) -> Optional[dict[str, Any]]:
+    _ensure_upload_statuses_loaded()
     with UPLOAD_STATUS_LOCK:
         status = UPLOAD_STATUSES.get(upload_id)
     return deepcopy(status) if status is not None else None
 
 
 def request_upload_cancel(upload_id: str) -> bool:
+    _ensure_upload_statuses_loaded()
     with UPLOAD_STATUS_LOCK:
         if upload_id not in UPLOAD_STATUSES:
             return False
@@ -231,8 +435,425 @@ def request_upload_cancel(upload_id: str) -> bool:
 
 
 def is_upload_cancel_requested(upload_id: str) -> bool:
+    _ensure_upload_statuses_loaded()
     with UPLOAD_STATUS_LOCK:
         return upload_id in UPLOAD_CANCEL_REQUESTS
+
+
+def list_upload_statuses() -> list[dict[str, Any]]:
+    _ensure_upload_statuses_loaded()
+    with UPLOAD_STATUS_LOCK:
+        statuses = [deepcopy(status) for status in UPLOAD_STATUSES.values()]
+    statuses.sort(key=lambda item: (item.get("updatedAt") or "", item["uploadId"]), reverse=True)
+    return statuses
+
+
+def _portable_relative_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(BACKEND_DIR))
+    except ValueError:
+        return str(path)
+
+
+def _portable_video_directory(video_id: str) -> Path:
+    return PORTABLE_VIDEOS_DIR / str(video_id)
+
+
+def _read_portable_manifest() -> dict[str, Any]:
+    ensure_storage_layout()
+    if not PORTABLE_MANIFEST_FILE.exists():
+        payload: dict[str, Any] = {}
+    else:
+        try:
+            payload = json.loads(PORTABLE_MANIFEST_FILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            logger.exception("Failed to read portable manifest from %s", PORTABLE_MANIFEST_FILE)
+            payload = {}
+
+    videos = payload.get("videos") if isinstance(payload, dict) else None
+    return {
+        "generatedAt": _optional_string(payload.get("generatedAt") if isinstance(payload, dict) else None) or _utc_timestamp(),
+        "portableRoot": str(PORTABLE_DIR.relative_to(BACKEND_DIR)),
+        "videos": videos if isinstance(videos, list) else [],
+    }
+
+
+def _write_portable_manifest_video_entry(entry: dict[str, Any]) -> None:
+    manifest = _read_portable_manifest()
+    videos = [item for item in manifest.get("videos", []) if str(item.get("videoId") or "") != str(entry.get("videoId") or "")]
+    videos.append(entry)
+    videos.sort(
+        key=lambda item: (
+            str(item.get("date") or ""),
+            str(item.get("startTime") or ""),
+            str(item.get("locationName") or ""),
+            str(item.get("videoId") or ""),
+        )
+    )
+    manifest["generatedAt"] = _utc_timestamp()
+    manifest["videos"] = videos
+    _write_json_file(PORTABLE_MANIFEST_FILE, manifest)
+
+
+def _remove_portable_video_artifacts(video_id: Optional[str]) -> None:
+    normalized_video_id = str(video_id or "").strip()
+    if not normalized_video_id:
+        return
+
+    shutil.rmtree(_portable_video_directory(normalized_video_id), ignore_errors=True)
+
+    manifest = _read_portable_manifest()
+    manifest["generatedAt"] = _utc_timestamp()
+    manifest["videos"] = [
+        item for item in manifest.get("videos", []) if str(item.get("videoId") or "") != normalized_video_id
+    ]
+    _write_json_file(PORTABLE_MANIFEST_FILE, manifest)
+
+
+def _video_event_rows(video_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered_events = sorted(
+        (deepcopy(event) for event in video_events),
+        key=lambda item: (
+            float(item.get("offsetSeconds") or 0.0),
+            str(item.get("timestamp") or ""),
+            str(item.get("id") or ""),
+        ),
+    )
+    rows: list[dict[str, Any]] = []
+    for event in ordered_events:
+        rows.append(
+            {
+                "eventId": event.get("id"),
+                "videoId": event.get("videoId"),
+                "type": event.get("type"),
+                "location": event.get("location"),
+                "clockTime": event.get("timestamp"),
+                "offsetSeconds": event.get("offsetSeconds"),
+                "videoTime": _format_video_offset_clock(event.get("offsetSeconds")),
+                "pedestrianId": event.get("pedestrianId"),
+                "frame": event.get("frame"),
+                "occlusionClass": event.get("occlusionClass"),
+                "occlusionLabel": _occlusion_label(event.get("occlusionClass")),
+                "description": event.get("description"),
+            }
+        )
+    return rows
+
+
+def _whole_footage_log_rows(
+    video_id: str,
+    timeline_rows: list[dict[str, Any]],
+    second_metrics: dict[int, dict[str, Optional[int]]],
+    track_identity_by_key: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+
+    for timeline_row in timeline_rows:
+        offset_second = max(0, int(timeline_row.get("offsetSeconds") or 0))
+        second_tracks = second_metrics.get(offset_second, {})
+        base_row = {
+            "videoId": video_id,
+            "offsetSeconds": offset_second,
+            "videoTime": timeline_row.get("videoTime"),
+            "observedAt": timeline_row.get("observedAt"),
+            "clockTime": timeline_row.get("clockTime"),
+            "visiblePedestrians": timeline_row.get("visiblePedestrians"),
+            "detectedNow": timeline_row.get("detectedNow"),
+            "cumulativeUniquePedestrians": timeline_row.get("cumulativeUniquePedestrians"),
+            "totalPedestriansSoFar": timeline_row.get("totalPedestriansSoFar"),
+            "lightOcclusionCount": timeline_row.get("lightOcclusionCount"),
+            "moderateOcclusionCount": timeline_row.get("moderateOcclusionCount"),
+            "heavyOcclusionCount": timeline_row.get("heavyOcclusionCount"),
+        }
+
+        if not second_tracks:
+            rows.append(
+                {
+                    **base_row,
+                    "trackKey": None,
+                    "trackId": None,
+                    "pedestrianId": None,
+                    "occlusionClass": None,
+                    "occlusionLabel": "",
+                    "insideROI": False,
+                }
+            )
+            continue
+
+        for track_key, occlusion_class in sorted(second_tracks.items()):
+            identity = track_identity_by_key.get(track_key, {})
+            rows.append(
+                {
+                    **base_row,
+                    "trackKey": track_key,
+                    "trackId": identity.get("trackId"),
+                    "pedestrianId": identity.get("pedestrianId"),
+                    "occlusionClass": occlusion_class,
+                    "occlusionLabel": _occlusion_label(occlusion_class),
+                    "insideROI": True,
+                }
+            )
+
+    return rows
+
+
+def _write_portable_video_artifacts(state: dict[str, Any], video: dict[str, Any]) -> None:
+    video_id = str(video.get("id") or "").strip()
+    if not video_id:
+        return
+
+    ensure_storage_layout()
+    video_dir = _portable_video_directory(video_id)
+    video_dir.mkdir(parents=True, exist_ok=True)
+
+    location = next((item for item in state.get("locations", []) if item.get("id") == video.get("locationId")), {})
+    video_events = [event for event in state.get("events", []) if event.get("videoId") == video_id]
+    video_tracks = [track for track in state.get("pedestrianTracks", []) if track.get("videoId") == video_id]
+    track_windows = {
+        str(item.get("id") or ""): item for item in _video_detail_pedestrian_tracks(state, video_id) if item.get("id")
+    }
+    severity_summary = _video_severity_summary(state, video)
+    observed_at = _observation_time(video)
+    duration_seconds = _video_duration_seconds(video, video_tracks)
+
+    second_metrics: dict[int, dict[str, Optional[int]]] = {}
+    first_seen_by_track: dict[str, int] = {}
+    track_identity_by_key: dict[str, dict[str, Any]] = {}
+    trajectory_rows: list[dict[str, Any]] = []
+    tracks_rows: list[dict[str, Any]] = []
+
+    for fallback_index, track in enumerate(video_tracks):
+        track_id = str(track.get("id") or f"{video_id}-track-{fallback_index}")
+        track_key = _tracked_pedestrian_track_key(track, video_id, fallback_index)
+        track_identity_by_key[track_key] = {
+            "trackId": track_id,
+            "pedestrianId": track.get("pedestrianId"),
+        }
+        samples = _normalized_trajectory_samples(track)
+        sample_offsets = [float(offset_second) for offset_second, _point, _occlusion_class in samples]
+        roi_qualified_offsets: list[int] = []
+        max_occlusion_class: Optional[int] = None
+
+        for offset_second, point, occlusion_class in samples:
+            normalized_second = max(0, int(offset_second))
+            inside_roi = _point_in_location_roi(point, location)
+            if occlusion_class is not None and (max_occlusion_class is None or int(occlusion_class) > int(max_occlusion_class)):
+                max_occlusion_class = int(occlusion_class)
+
+            sample_timestamp = (observed_at + timedelta(seconds=normalized_second)).replace(microsecond=0) if observed_at is not None else None
+            trajectory_rows.append(
+                {
+                    "videoId": video_id,
+                    "trackKey": track_key,
+                    "trackId": track_id,
+                    "pedestrianId": track.get("pedestrianId"),
+                    "offsetSeconds": normalized_second,
+                    "videoTime": _format_video_offset_clock(normalized_second),
+                    "observedAt": sample_timestamp.isoformat() if sample_timestamp is not None else None,
+                    "clockTime": sample_timestamp.strftime("%H:%M:%S") if sample_timestamp is not None else None,
+                    "xNorm": round(point[0], 6),
+                    "yNorm": round(point[1], 6),
+                    "occlusionClass": occlusion_class,
+                    "occlusionLabel": _occlusion_label(occlusion_class),
+                    "insideROI": inside_roi,
+                }
+            )
+
+            if not inside_roi:
+                continue
+
+            roi_qualified_offsets.append(normalized_second)
+            first_seen_by_track[track_key] = min(first_seen_by_track.get(track_key, normalized_second), normalized_second)
+
+            second_tracks = second_metrics.setdefault(normalized_second, {})
+            existing_occlusion = second_tracks.get(track_key)
+            if existing_occlusion is None or (
+                occlusion_class is not None and (existing_occlusion is None or int(occlusion_class) > int(existing_occlusion))
+            ):
+                second_tracks[track_key] = occlusion_class
+
+        compact_track = track_windows.get(track_id, {})
+        first_offset = compact_track.get("firstOffsetSeconds")
+        last_offset = compact_track.get("lastOffsetSeconds")
+        if first_offset is None and sample_offsets:
+            first_offset = min(sample_offsets)
+        if last_offset is None and sample_offsets:
+            last_offset = max(sample_offsets)
+
+        first_timestamp = _pedestrian_track_timestamp(track, video)
+        last_timestamp = _pedestrian_track_end_timestamp(track, video)
+        tracks_rows.append(
+            {
+                "videoId": video_id,
+                "trackKey": track_key,
+                "trackId": track_id,
+                "pedestrianId": track.get("pedestrianId"),
+                "firstOffsetSeconds": first_offset,
+                "lastOffsetSeconds": last_offset,
+                "bestOffsetSeconds": track.get("bestOffsetSeconds"),
+                "firstObservedAt": first_timestamp.isoformat() if first_timestamp is not None else None,
+                "lastObservedAt": last_timestamp.isoformat() if last_timestamp is not None else None,
+                "firstTimestamp": track.get("firstTimestamp"),
+                "lastTimestamp": track.get("lastTimestamp"),
+                "bestTimestamp": track.get("bestTimestamp"),
+                "sampleCount": len(samples),
+                "roiQualifiedSampleCount": len(roi_qualified_offsets),
+                "maxOcclusionClass": max_occlusion_class,
+                "thumbnailPath": track.get("thumbnailPath"),
+                "previewPath": track.get("previewPath"),
+                "appearanceSummary": track.get("appearanceSummary"),
+            }
+        )
+
+    new_tracks_by_second: dict[int, int] = {}
+    for first_seen_second in first_seen_by_track.values():
+        new_tracks_by_second[first_seen_second] = new_tracks_by_second.get(first_seen_second, 0) + 1
+
+    timeline_rows: list[dict[str, Any]] = []
+    cumulative_unique = 0
+    for offset_second in range(max(1, duration_seconds)):
+        cumulative_unique += new_tracks_by_second.get(offset_second, 0)
+        track_occlusions = second_metrics.get(offset_second, {})
+        visible_count = len(track_occlusions)
+        light_count = sum(1 for value in track_occlusions.values() if value == 0)
+        moderate_count = sum(1 for value in track_occlusions.values() if value == 1)
+        heavy_count = sum(1 for value in track_occlusions.values() if value == 2)
+        occlusion_value = 0.0
+        ptsi_breakdown: dict[str, Any] = {
+            "mode": _location_ptsi_mode(location),
+            "walkableAreaM2": _location_walkable_area_m2(location),
+            "roiAreaRatio": round(_location_roi_area_ratio(location), 6),
+            "capacityProxy": round(_location_capacity_proxy(location), 3) if location else None,
+            "congestionScore": 0.0,
+            "occlusionValue": 0.0,
+            "spacePerPedestrian": None,
+            "los": None,
+            "losDescription": None,
+            "score": 0.0,
+        }
+        severity = "neutral"
+
+        if visible_count > 0:
+            occlusion_value = (
+                (light_count * PTSI_OCCLUSION_WEIGHTS[0])
+                + (moderate_count * PTSI_OCCLUSION_WEIGHTS[1])
+                + (heavy_count * PTSI_OCCLUSION_WEIGHTS[2])
+            ) / (3.0 * visible_count)
+            ptsi_breakdown = _ptsi_score_breakdown(visible_count, location, occlusion_value)
+            severity = _timeline_severity_from_score(float(ptsi_breakdown["score"]))
+
+        sample_timestamp = (observed_at + timedelta(seconds=offset_second)).replace(microsecond=0) if observed_at is not None else None
+        timeline_rows.append(
+            {
+                "videoId": video_id,
+                "offsetSeconds": offset_second,
+                "videoTime": _format_video_offset_clock(offset_second),
+                "observedAt": sample_timestamp.isoformat() if sample_timestamp is not None else None,
+                "clockTime": sample_timestamp.strftime("%H:%M:%S") if sample_timestamp is not None else None,
+                "visiblePedestrians": visible_count,
+                "detectedNow": visible_count,
+                "cumulativeUniquePedestrians": cumulative_unique,
+                "totalPedestriansSoFar": cumulative_unique,
+                "lightOcclusionCount": light_count,
+                "moderateOcclusionCount": moderate_count,
+                "heavyOcclusionCount": heavy_count,
+                "occlusionValue": round(occlusion_value, 4),
+                "ptsiScore": ptsi_breakdown["score"],
+                "los": ptsi_breakdown["los"],
+                "losDescription": ptsi_breakdown["losDescription"],
+                "severity": severity,
+                "mode": ptsi_breakdown["mode"],
+                "walkableAreaM2": ptsi_breakdown["walkableAreaM2"],
+                "roiAreaRatio": ptsi_breakdown["roiAreaRatio"],
+                "capacityProxy": ptsi_breakdown["capacityProxy"],
+                "congestionScore": ptsi_breakdown["congestionScore"],
+                "spacePerPedestrianM2": ptsi_breakdown["spacePerPedestrian"],
+            }
+        )
+
+    whole_footage_rows = _whole_footage_log_rows(video_id, timeline_rows, second_metrics, track_identity_by_key)
+
+    severity_rows = [
+        {
+            "startOffsetSeconds": bucket.get("startOffsetSeconds"),
+            "endOffsetSeconds": bucket.get("endOffsetSeconds"),
+            "severity": bucket.get("severity"),
+            "score": bucket.get("score"),
+        }
+        for bucket in severity_summary.get("buckets", [])
+    ]
+    event_rows = _video_event_rows(video_events)
+
+    metadata_payload = {
+        "generatedAt": _utc_timestamp(),
+        "video": deepcopy(video),
+        "location": _location_payload(location) if location else None,
+        "counts": {
+            "pedestrianCount": int(video.get("pedestrianCount") or 0),
+            "eventCount": len(event_rows),
+            "trackCount": len(tracks_rows),
+            "trajectorySampleCount": len(trajectory_rows),
+            "timelineRowCount": len(timeline_rows),
+            "wholeFootageLogRowCount": len(whole_footage_rows),
+            "severityBucketCount": len(severity_rows),
+        },
+        "severitySummary": severity_summary,
+    }
+
+    artifacts = {
+        "metadataJson": video_dir / "metadata.json",
+        "manifestJson": video_dir / "manifest.json",
+        "eventsCsv": video_dir / "events.csv",
+        "eventsJson": video_dir / "events.json",
+        "tracksCsv": video_dir / "tracks.csv",
+        "tracksJson": video_dir / "tracks.json",
+        "trajectorySamplesCsv": video_dir / "trajectory_samples.csv",
+        "trajectorySamplesJson": video_dir / "trajectory_samples.json",
+        "timelineCsv": video_dir / "timeline.csv",
+        "timelineJson": video_dir / "timeline.json",
+        "wholeFootageLogCsv": video_dir / "whole_footage_log.csv",
+        "wholeFootageLogJson": video_dir / "whole_footage_log.json",
+        "severityBucketsCsv": video_dir / "severity_buckets.csv",
+        "severityBucketsJson": video_dir / "severity_buckets.json",
+    }
+
+    _write_json_file(artifacts["metadataJson"], metadata_payload)
+    _write_csv_rows(artifacts["eventsCsv"], event_rows)
+    _write_json_file(artifacts["eventsJson"], event_rows)
+    _write_csv_rows(artifacts["tracksCsv"], tracks_rows)
+    _write_json_file(artifacts["tracksJson"], tracks_rows)
+    _write_csv_rows(artifacts["trajectorySamplesCsv"], trajectory_rows)
+    _write_json_file(artifacts["trajectorySamplesJson"], trajectory_rows)
+    _write_csv_rows(artifacts["timelineCsv"], timeline_rows)
+    _write_json_file(artifacts["timelineJson"], timeline_rows)
+    _write_csv_rows(artifacts["wholeFootageLogCsv"], whole_footage_rows)
+    _write_json_file(artifacts["wholeFootageLogJson"], whole_footage_rows)
+    _write_csv_rows(artifacts["severityBucketsCsv"], severity_rows)
+    _write_json_file(artifacts["severityBucketsJson"], severity_rows)
+
+    video_manifest = {
+        "generatedAt": metadata_payload["generatedAt"],
+        "videoId": video_id,
+        "label": f"{video.get('location') or 'Unknown Location'} · {video.get('date') or ''} · {video.get('startTime') or video.get('timestamp') or ''}",
+        "directory": _portable_relative_path(video_dir),
+        "artifacts": {name: _portable_relative_path(path) for name, path in artifacts.items()},
+    }
+    _write_json_file(artifacts["manifestJson"], video_manifest)
+
+    _write_portable_manifest_video_entry(
+        {
+            "videoId": video_id,
+            "locationId": video.get("locationId"),
+            "locationName": video.get("location"),
+            "date": video.get("date"),
+            "startTime": video.get("startTime"),
+            "endTime": video.get("endTime"),
+            "directory": _portable_relative_path(video_dir),
+            "generatedAt": metadata_payload["generatedAt"],
+            "pedestrianCount": int(video.get("pedestrianCount") or 0),
+            "artifacts": video_manifest["artifacts"],
+        }
+    )
 
 
 def _location_video_cards(videos: list[dict[str, Any]], location_id: str) -> list[dict[str, Any]]:
@@ -332,10 +953,23 @@ def seed_state() -> dict[str, Any]:
 
 
 def ensure_storage_layout() -> None:
-    for path in (STORAGE_DIR, MODELS_DIR, RAW_VIDEOS_DIR, PROCESSED_VIDEOS_DIR, EXPORTS_DIR):
+    for path in (STORAGE_DIR, MODELS_DIR, RAW_VIDEOS_DIR, PROCESSED_VIDEOS_DIR, EXPORTS_DIR, PORTABLE_DIR, PORTABLE_VIDEOS_DIR):
         path.mkdir(parents=True, exist_ok=True)
     if not DATA_FILE.exists():
         DATA_FILE.write_text(json.dumps(seed_state(), indent=2), encoding="utf-8")
+    if not QUEUE_HISTORY_JSON_FILE.exists():
+        _write_json_file(QUEUE_HISTORY_JSON_FILE, [])
+    if not QUEUE_HISTORY_CSV_FILE.exists():
+        _write_csv_rows(QUEUE_HISTORY_CSV_FILE, [], preferred=UPLOAD_HISTORY_CSV_FIELDS)
+    if not PORTABLE_MANIFEST_FILE.exists():
+        _write_json_file(
+            PORTABLE_MANIFEST_FILE,
+            {
+                "generatedAt": _utc_timestamp(),
+                "portableRoot": str(PORTABLE_DIR.relative_to(BACKEND_DIR)),
+                "videos": [],
+            },
+        )
 
 
 def load_state() -> dict[str, Any]:
@@ -446,6 +1080,7 @@ def delete_video_assets(video: Optional[dict[str, Any]]) -> None:
     video_id = video.get("id")
     if video_id:
         shutil.rmtree(PROCESSED_VIDEOS_DIR / str(video_id), ignore_errors=True)
+        _remove_portable_video_artifacts(str(video_id))
 
 
 def list_locations(date: Optional[str] = None) -> list[dict[str, Any]]:
@@ -659,6 +1294,7 @@ def set_video_inference_result(
     state["pedestrianTracks"] = [track for track in state.get("pedestrianTracks", []) if track.get("videoId") != video_id]
     state["pedestrianTracks"].extend(pedestrian_tracks or [])
     save_state(state)
+    _write_portable_video_artifacts(state, video)
     _refresh_semantic_index(state)
     return deepcopy(video)
 
@@ -672,6 +1308,7 @@ def remove_video(video_id: str) -> bool:
     removed = len(state["videos"]) != original_video_count
     if removed:
         save_state(state)
+        _remove_portable_video_artifacts(video_id)
         _refresh_semantic_index(state)
     return removed
 
@@ -1381,6 +2018,40 @@ def _location_unique_totals(
 
     totals = sorted(totals_by_location.items(), key=lambda item: item[1], reverse=True)
     return totals
+
+
+def _dashboard_unique_pedestrian_rows(first_seen_by_track: dict[str, tuple[datetime, str]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    ordered_entries = sorted(first_seen_by_track.items(), key=lambda item: (item[1][0], item[1][1], item[0]))
+
+    for track_key, (observed_at, location) in ordered_entries:
+        video_id, _, track_suffix = str(track_key).partition(":")
+        pedestrian_id: Optional[int] = None
+        source_type = "trackedPedestrian"
+
+        if track_suffix.isdigit():
+            pedestrian_id = int(track_suffix)
+            source_type = "pedestrianId"
+        elif track_suffix.startswith("track:"):
+            source_type = "trackId"
+        elif track_suffix.startswith("fallback:") or track_suffix.startswith("track-fallback:"):
+            source_type = "fallbackCount"
+
+        rows.append(
+            {
+                "trackKey": track_key,
+                "videoId": video_id or None,
+                "location": location,
+                "firstSeenAt": observed_at.isoformat(),
+                "firstSeenDate": observed_at.strftime("%Y-%m-%d"),
+                "firstSeenTime": observed_at.strftime("%H:%M:%S"),
+                "pedestrianId": pedestrian_id,
+                "sourceType": source_type,
+                "countedInDashboardTotal": True,
+            }
+        )
+
+    return rows
 
 
 def _traffic_series_from_samples(
@@ -2236,9 +2907,13 @@ def ai_synthesis(date: str, time_range: str) -> dict[str, Any]:
 def export_dashboard_report(date: str, time_range: str) -> Path:
     ensure_storage_layout()
 
+    state, _, videos, events = _filtered_dashboard_records(date)
+    pedestrian_tracks = _filtered_pedestrian_tracks(state, videos)
+    _analytics_samples, first_seen_by_track = _build_analytics_samples(videos, events, pedestrian_tracks)
     summary = dashboard_summary(date)
     traffic_response = dashboard_traffic(date, time_range)
     traffic = traffic_response["series"]
+    occlusion_response = dashboard_occlusion(date, time_range)
     synthesis = ai_synthesis(date, time_range)
     model = get_model_info()
 
@@ -2246,8 +2921,9 @@ def export_dashboard_report(date: str, time_range: str) -> Path:
 
     generated_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
     timestamp_slug = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-    filename = f"dashboard-report-{slugify(date)}-{slugify(time_range)}-{timestamp_slug}.md"
+    filename = f"{slugify(date)}-{slugify(time_range)}-dashboard-report-{timestamp_slug}.zip"
     target = EXPORTS_DIR / filename
+    report_name = f"{slugify(date)}-{slugify(time_range)}-dashboard-report-{timestamp_slug}.md"
 
     lines = [
         "# ALIVE Engine Dashboard Report",
@@ -2256,6 +2932,7 @@ def export_dashboard_report(date: str, time_range: str) -> Path:
         f"- Time Range: {format_time_range_label(time_range)}",
         f"- Generated At: {generated_at}",
         f"- Active Model: {model.get('currentModel') or 'No model selected'}",
+        f"- Bundle Format: ZIP (Markdown + CSV + JSON portable artifacts)",
         "",
         "## Summary",
         "",
@@ -2279,6 +2956,23 @@ def export_dashboard_report(date: str, time_range: str) -> Path:
     lines.extend(
         [
             "",
+            "## PTSI / LOS Hotspots",
+            "",
+        ]
+    )
+
+    hotspot_locations = occlusion_response.get("locations", [])
+    if hotspot_locations:
+        for location in hotspot_locations:
+            lines.append(
+                f"- {location['name']}: LOS {location.get('los') or 'N/A'} · PTSI {location.get('score') if location.get('score') is not None else 'N/A'}"
+            )
+    else:
+        lines.append("- No PTSI hotspot data available for the selected range.")
+
+    lines.extend(
+        [
+            "",
             "## AI Synthesis",
             "",
         ]
@@ -2291,7 +2985,62 @@ def export_dashboard_report(date: str, time_range: str) -> Path:
             lines.extend([f"- {badge['label']}: {badge['value']} ({badge['tone']})" for badge in section["badges"]])
             lines.append("")
 
-    target.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
+    markdown_text = "\n".join(lines).strip() + "\n"
+
+    dashboard_summary_rows = [summary]
+    traffic_rows = [dict(point) for point in traffic]
+    location_total_rows = [dict(entry) for entry in location_totals]
+    ptsi_rows = [dict(location) for location in occlusion_response.get("locations", [])]
+    unique_pedestrian_rows = _dashboard_unique_pedestrian_rows(first_seen_by_track)
+    video_total_rows = [
+        {
+            "videoId": video.get("id"),
+            "locationId": video.get("locationId"),
+            "locationName": video.get("location"),
+            "date": video.get("date"),
+            "startTime": video.get("startTime"),
+            "endTime": video.get("endTime"),
+            "pedestrianCount": int(video.get("pedestrianCount") or 0),
+        }
+        for video in videos
+    ]
+
+    for video in videos:
+        _write_portable_video_artifacts(state, video)
+
+    selected_videos = [video for video in state.get("videos", []) if str(video.get("date") or "") == str(date)]
+
+    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(report_name, markdown_text)
+        archive.writestr("dashboard/summary.json", json.dumps(summary, indent=2))
+        archive.writestr("dashboard/summary.csv", _csv_text(dashboard_summary_rows))
+        archive.writestr("dashboard/unique_pedestrians.json", json.dumps(unique_pedestrian_rows, indent=2))
+        archive.writestr("dashboard/unique_pedestrians.csv", _csv_text(unique_pedestrian_rows))
+        archive.writestr("dashboard/video_totals.json", json.dumps(video_total_rows, indent=2))
+        archive.writestr("dashboard/video_totals.csv", _csv_text(video_total_rows))
+        archive.writestr("dashboard/traffic.json", json.dumps(traffic_response, indent=2))
+        archive.writestr("dashboard/traffic.csv", _csv_text(traffic_rows))
+        archive.writestr("dashboard/location_totals.csv", _csv_text(location_total_rows))
+        archive.writestr("dashboard/ptsi_map.json", json.dumps(occlusion_response, indent=2))
+        archive.writestr("dashboard/ptsi_map.csv", _csv_text(ptsi_rows))
+        archive.writestr("dashboard/ai_synthesis.json", json.dumps(synthesis, indent=2))
+
+        if QUEUE_HISTORY_JSON_FILE.exists():
+            archive.write(QUEUE_HISTORY_JSON_FILE, arcname="portable/queue_history.json")
+        if QUEUE_HISTORY_CSV_FILE.exists():
+            archive.write(QUEUE_HISTORY_CSV_FILE, arcname="portable/queue_history.csv")
+        if PORTABLE_MANIFEST_FILE.exists():
+            archive.write(PORTABLE_MANIFEST_FILE, arcname="portable/manifest.json")
+
+        for video in selected_videos:
+            video_dir = _portable_video_directory(str(video.get("id") or ""))
+            if not video_dir.exists():
+                continue
+            for path in video_dir.rglob("*"):
+                if path.is_dir():
+                    continue
+                archive.write(path, arcname=_portable_relative_path(path))
+
     return target
 
 

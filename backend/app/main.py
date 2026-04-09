@@ -253,6 +253,11 @@ def get_video(video_id: str) -> dict:
     return video
 
 
+@app.get("/api/videos/uploads/history", response_model=list[schemas.VideoUploadStatus])
+def get_video_upload_history() -> list[dict[str, Any]]:
+    return store.list_upload_statuses()
+
+
 @app.get("/api/videos/uploads/{upload_id}", response_model=schemas.VideoUploadStatus)
 def get_video_upload_status(upload_id: str) -> dict:
     status = store.get_upload_status(upload_id)
@@ -303,7 +308,19 @@ async def upload_video(
     raw_target.write_bytes(await file.read())
 
     if uploadId:
-        store.set_upload_status(uploadId, state="queued", progress_percent=0, message="Upload received. Preparing video for processing...", phase="queued")
+        store.set_upload_status(
+            uploadId,
+            state="queued",
+            progress_percent=0,
+            message="Upload received. Preparing video for processing...",
+            phase="queued",
+            file_name=safe_name,
+            location_id=locationId,
+            date=date,
+            start_time=startTime,
+            end_time=endTime,
+            fast_mode=fastMode,
+        )
 
     try:
         video = store.add_video(
@@ -329,7 +346,15 @@ async def upload_video(
         ensure_not_cancelled()
 
         if uploadId:
-            store.set_upload_status(uploadId, state="processing", progress_percent=0, message="Starting detection and tracking...", phase="tracking", video_id=video["id"])
+            store.set_upload_status(
+                uploadId,
+                state="processing",
+                progress_percent=0,
+                message="Starting detection and tracking...",
+                phase="tracking",
+                video_id=video["id"],
+                location_name=video["location"],
+            )
 
         def handle_processing_progress(payload: dict) -> None:
             ensure_not_cancelled()
@@ -446,7 +471,7 @@ def get_ai_synthesis(date: str = "2026-03-15", timeRange: str = "whole-day") -> 
 @app.get("/api/dashboard/export")
 def export_dashboard_report(date: str = "2026-03-15", timeRange: str = "whole-day") -> FileResponse:
     report_path = store.export_dashboard_report(date, timeRange)
-    return FileResponse(report_path, media_type="text/markdown", filename=report_path.name)
+    return FileResponse(report_path, media_type="application/zip", filename=report_path.name)
 
 
 @app.get("/api/search", response_model=list[schemas.SearchResult])

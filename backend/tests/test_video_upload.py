@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import importlib
+import io
 import json
 import logging
 import os
 import sys
 import threading
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -24,6 +26,11 @@ def configure_temp_storage(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(store, "RAW_VIDEOS_DIR", storage_dir / "videos" / "raw")
     monkeypatch.setattr(store, "PROCESSED_VIDEOS_DIR", storage_dir / "videos" / "processed")
     monkeypatch.setattr(store, "EXPORTS_DIR", storage_dir / "exports")
+    monkeypatch.setattr(store, "PORTABLE_DIR", storage_dir / "portable")
+    monkeypatch.setattr(store, "PORTABLE_VIDEOS_DIR", storage_dir / "portable" / "videos")
+    monkeypatch.setattr(store, "QUEUE_HISTORY_JSON_FILE", storage_dir / "portable" / "queue_history.json")
+    monkeypatch.setattr(store, "QUEUE_HISTORY_CSV_FILE", storage_dir / "portable" / "queue_history.csv")
+    monkeypatch.setattr(store, "PORTABLE_MANIFEST_FILE", storage_dir / "portable" / "manifest.json")
     monkeypatch.setattr(store, "DATA_FILE", storage_dir / "dev_data.json")
 
     store.ensure_storage_layout()
@@ -233,6 +240,8 @@ def test_upload_video_runs_inference_and_persists_results(monkeypatch, tmp_path:
         lambda: {"installed": True, "modelExists": True, "ready": True, "currentModel": "best.pt"},
     )
 
+    upload_id = "upload-portable-artifacts"
+
     def fake_run_video_inference(video_path: Path, model_name=None, video_record=None, fast_mode: bool = False, progress_callback=None):
         processed_dir = store.PROCESSED_VIDEOS_DIR / video_record["id"]
         processed_dir.mkdir(parents=True, exist_ok=True)
@@ -276,6 +285,7 @@ def test_upload_video_runs_inference_and_persists_results(monkeypatch, tmp_path:
                     "appearanceSummary": "Representative crop suggests head region appears blue, lower clothing appears blue.",
                     "occlusionClass": None,
                     "bestArea": 2400.0,
+                    "trajectorySamples": [[0, 0.2, 0.2, 0], [1, 0.2, 0.2, 1], [2, 0.2, 0.2, 2]],
                 }
             ],
         }
@@ -290,6 +300,7 @@ def test_upload_video_runs_inference_and_persists_results(monkeypatch, tmp_path:
                 "date": "2026-03-17",
                 "startTime": "10:00",
                 "endTime": "10:01",
+                "uploadId": upload_id,
             },
             files={"file": ("clip.mp4", b"fake-video-bytes", "video/mp4")},
         )
@@ -316,6 +327,127 @@ def test_upload_video_runs_inference_and_persists_results(monkeypatch, tmp_path:
     assert len(saved_tracks) == 1
     assert saved_tracks[0]["pedestrianId"] == 7
     assert saved_tracks[0]["thumbnailPath"].endswith("track-7.jpg")
+
+    portable_dir = store.PORTABLE_VIDEOS_DIR / body["id"]
+    assert (portable_dir / "timeline.csv").exists()
+    assert (portable_dir / "tracks.csv").exists()
+    assert (portable_dir / "events.csv").exists()
+    assert (portable_dir / "whole_footage_log.csv").exists()
+
+    manifest = json.loads(store.PORTABLE_MANIFEST_FILE.read_text(encoding="utf-8"))
+    manifest_entry = next(item for item in manifest["videos"] if item["videoId"] == body["id"])
+    assert manifest_entry["artifacts"]["timelineCsv"].endswith(f"{body['id']}/timeline.csv")
+    assert manifest_entry["artifacts"]["wholeFootageLogCsv"].endswith(f"{body['id']}/whole_footage_log.csv")
+
+    timeline_text = (portable_dir / "timeline.csv").read_text(encoding="utf-8")
+    assert "cumulativeUniquePedestrians" in timeline_text
+    assert "totalPedestriansSoFar" in timeline_text
+
+    whole_footage_text = (portable_dir / "whole_footage_log.csv").read_text(encoding="utf-8")
+    assert "videoTime" in whole_footage_text
+    assert "trackId" in whole_footage_text
+    assert "cumulativeUniquePedestrians" in whole_footage_text
+
+    queue_history = json.loads(store.QUEUE_HISTORY_JSON_FILE.read_text(encoding="utf-8"))
+    history_item = next(item for item in queue_history if item["uploadId"] == upload_id)
+    assert history_item["state"] == "complete"
+    assert history_item["locationName"] == "EDSA Sec Walk"
+
+    with TestClient(main.app) as client:
+        history_response = client.get("/api/videos/uploads/history")
+
+    assert history_response.status_code == 200
+    assert any(item["uploadId"] == upload_id and item["state"] == "complete" for item in history_response.json())
+
+
+def test_dashboard_export_returns_zip_bundle_with_portable_artifacts(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    video = store.add_video(
+        {
+            "locationId": "edsa-sec-walk",
+            "date": "2026-03-17",
+            "startTime": "10:00:00",
+            "endTime": "10:00:05",
+            "rawPath": None,
+        }
+    )
+    store.set_video_inference_result(
+        video_id=video["id"],
+        pedestrian_count=1,
+        processed_path=None,
+        events=[
+            {
+                "id": "evt-export-1",
+                "type": "detection",
+                "location": video["location"],
+                "timestamp": "10:00:00 AM",
+                "description": "Pedestrian detected.",
+                "videoId": video["id"],
+                "pedestrianId": 1,
+                "offsetSeconds": 0.0,
+                "occlusionClass": 1,
+            }
+        ],
+        pedestrian_tracks=[
+            {
+                "id": "trk-export-1",
+                "videoId": video["id"],
+                "pedestrianId": 1,
+                "location": video["location"],
+                "firstOffsetSeconds": 0.0,
+                "lastOffsetSeconds": 2.0,
+                "trajectorySamples": [[0, 0.3, 0.3, 0], [1, 0.3, 0.3, 1], [2, 0.3, 0.3, 2]],
+            }
+        ],
+    )
+    store.set_upload_status(
+        "upload-export-bundle",
+        state="complete",
+        progress_percent=100,
+        message="Video upload and processing complete.",
+        video_id=video["id"],
+        file_name="clip.mp4",
+        location_id=video["locationId"],
+        location_name=video["location"],
+        date=video["date"],
+        start_time=video["startTime"],
+        end_time=video["endTime"],
+        fast_mode=False,
+    )
+
+    store._remove_portable_video_artifacts(video["id"])
+    assert not (store.PORTABLE_VIDEOS_DIR / video["id"] / "whole_footage_log.csv").exists()
+
+    with TestClient(main.app) as client:
+        response = client.get("/api/dashboard/export", params={"date": "2026-03-17", "timeRange": "whole-day"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/zip")
+    assert "2026-03-17-whole-day-dashboard-report" in response.headers.get("content-disposition", "")
+
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    archive_names = set(archive.namelist())
+
+    assert any(name.endswith(".md") for name in archive_names)
+    assert "dashboard/summary.csv" in archive_names
+    assert "dashboard/unique_pedestrians.csv" in archive_names
+    assert "dashboard/video_totals.csv" in archive_names
+    assert "dashboard/traffic.json" in archive_names
+    assert "portable/manifest.json" in archive_names
+    assert "portable/queue_history.json" in archive_names
+    assert f"storage/portable/videos/{video['id']}/timeline.csv" in archive_names
+    assert f"storage/portable/videos/{video['id']}/whole_footage_log.csv" in archive_names
+    assert f"storage/portable/videos/{video['id']}/tracks.json" in archive_names
+
+    unique_csv_text = archive.read("dashboard/unique_pedestrians.csv").decode("utf-8")
+    assert "countedInDashboardTotal" in unique_csv_text
+    assert video["id"] in unique_csv_text
+
+    whole_footage_csv_text = archive.read(f"storage/portable/videos/{video['id']}/whole_footage_log.csv").decode("utf-8")
+    assert "00:00:00" in whole_footage_csv_text
+    assert "trk-export-1" in whole_footage_csv_text
+    assert (store.PORTABLE_VIDEOS_DIR / video["id"] / "whole_footage_log.csv").exists()
 
 
 def test_upload_video_forwards_fast_mode(monkeypatch, tmp_path: Path) -> None:
