@@ -10,6 +10,8 @@ GEMINI_SEARCH_URL = "https://generativelanguage.googleapis.com/v1beta/models/gem
 MAX_RETURNED_MATCHES = 5
 SUPPORTED_QUERY_REGIONS = ("head region", "upper clothing", "lower clothing")
 SUPPORTED_QUERY_COLORS = ("black", "blue", "brown", "gray", "green", "orange", "pink", "purple", "red", "white", "yellow")
+SEARCH_QUERY_PARSE_TIMEOUT_SECONDS = 6
+SEARCH_RESULT_RANK_TIMEOUT_SECONDS = 8
 
 
 def _response_text(payload: dict[str, Any]) -> str:
@@ -83,7 +85,7 @@ def parse_search_query(query: str, locations: list[dict[str, Any]]) -> dict[str,
         ],
     }
 
-    parsed = _call_gemini_json(prompt, timeout=15)
+    parsed = _call_gemini_json(prompt, timeout=SEARCH_QUERY_PARSE_TIMEOUT_SECONDS)
     if not isinstance(parsed, dict):
         return {}
 
@@ -165,7 +167,7 @@ def rank_pedestrian_matches(query: str, candidates: list[dict[str, Any]]) -> lis
         "candidates": candidates,
     }
 
-    parsed = _call_gemini_json(prompt, timeout=20)
+    parsed = _call_gemini_json(prompt, timeout=SEARCH_RESULT_RANK_TIMEOUT_SECONDS)
     if parsed is None:
         return []
 

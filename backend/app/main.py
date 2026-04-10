@@ -4,7 +4,7 @@ import json
 import os
 import re
 import shutil
-from threading import Lock
+from threading import Lock, Thread
 from pathlib import Path
 from typing import Any, Optional
 from urllib import error as urllib_error
@@ -38,6 +38,7 @@ ATENEO_LOCATION_BIAS = {
     }
 }
 SEARCH_BACKFILL_LOCK = Lock()
+SEARCH_BACKFILL_THREAD: Optional[Thread] = None
 
 
 def load_local_env() -> None:
@@ -167,36 +168,60 @@ def _latest_legacy_video_for_search() -> Optional[dict[str, Any]]:
     return None
 
 
+def _backfill_legacy_video_search_metadata(video: dict[str, Any]) -> bool:
+    refreshed_video = store.get_video(str(video.get("id") or ""))
+    if refreshed_video is None:
+        return False
+
+    state = store.load_state()
+    if not _video_needs_search_backfill(state, refreshed_video):
+        return True
+
+    source_path = store.resolve_video_source_path(refreshed_video)
+    if source_path is None:
+        return False
+
+    try:
+        result = inference.run_video_inference(source_path, None, refreshed_video, False, None)
+    except Exception:
+        return False
+
+    store.set_video_inference_result(
+        video_id=refreshed_video["id"],
+        pedestrian_count=result.get("pedestrianCount", 0),
+        processed_path=result.get("processedPath"),
+        events=result.get("events", []),
+        pedestrian_tracks=result.get("pedestrianTracks", []),
+    )
+    return True
+
+
+def _search_backfill_worker() -> None:
+    global SEARCH_BACKFILL_THREAD
+
+    try:
+        while True:
+            video = _latest_legacy_video_for_search()
+            if video is None:
+                return
+            if not _backfill_legacy_video_search_metadata(video):
+                return
+    finally:
+        with SEARCH_BACKFILL_LOCK:
+            SEARCH_BACKFILL_THREAD = None
+
+
 def _ensure_search_metadata() -> None:
-    video = _latest_legacy_video_for_search()
-    if video is None:
+    global SEARCH_BACKFILL_THREAD
+
+    if _latest_legacy_video_for_search() is None:
         return
 
     with SEARCH_BACKFILL_LOCK:
-        refreshed_video = store.get_video(str(video.get("id") or ""))
-        if refreshed_video is None:
+        if SEARCH_BACKFILL_THREAD is not None and SEARCH_BACKFILL_THREAD.is_alive():
             return
-
-        state = store.load_state()
-        if not _video_needs_search_backfill(state, refreshed_video):
-            return
-
-        source_path = store.resolve_video_source_path(refreshed_video)
-        if source_path is None:
-            return
-
-        try:
-            result = inference.run_video_inference(source_path, None, refreshed_video, False, None)
-        except Exception:
-            return
-
-        store.set_video_inference_result(
-            video_id=refreshed_video["id"],
-            pedestrian_count=result.get("pedestrianCount", 0),
-            processed_path=result.get("processedPath"),
-            events=result.get("events", []),
-            pedestrian_tracks=result.get("pedestrianTracks", []),
-        )
+        SEARCH_BACKFILL_THREAD = Thread(target=_search_backfill_worker, name="search-metadata-backfill", daemon=True)
+        SEARCH_BACKFILL_THREAD.start()
 
 
 @app.get("/health")
@@ -368,6 +393,8 @@ async def upload_video(
                     video_id=video["id"],
                 )
             ensure_not_cancelled()
+
+        handle_processing_progress.cancel_check = ensure_not_cancelled  # type: ignore[attr-defined]
 
         result = await run_in_threadpool(
             inference.run_video_inference,

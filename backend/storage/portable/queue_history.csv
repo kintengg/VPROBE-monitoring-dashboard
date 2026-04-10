@@ -1,1 +1,2 @@
 uploadId,state,progressPercent,message,phase,videoId,error,fileName,locationId,locationName,date,startTime,endTime,fastMode,createdAt,startedAt,completedAt,updatedAt
+c75dc105-d862-45b3-9ac3-cad13b401305,complete,100,Video upload and processing complete.,ptsi,97b2e149,,2.mp4,gate-1-walkway,Gate 1 Walkway,2026-04-01,10:10:10,10:15:10,false,2026-04-09T23:50:35Z,2026-04-09T23:50:35Z,2026-04-10T00:01:29Z,2026-04-10T00:01:29Z

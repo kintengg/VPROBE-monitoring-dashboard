@@ -38,6 +38,11 @@ def configure_temp_storage(monkeypatch, tmp_path: Path) -> None:
         store.UPLOAD_STATUSES.clear()
         store.UPLOAD_CANCEL_REQUESTS.clear()
 
+    backfill_thread = getattr(main, "SEARCH_BACKFILL_THREAD", None)
+    if backfill_thread is not None and backfill_thread.is_alive():
+        backfill_thread.join(timeout=1)
+    monkeypatch.setattr(main, "SEARCH_BACKFILL_THREAD", None)
+
 
 def test_semantic_search_configures_openmp_compatibility_env(monkeypatch) -> None:
     monkeypatch.delenv("KMP_DUPLICATE_LIB_OK", raising=False)
@@ -229,6 +234,40 @@ def test_enrich_track_summaries_with_vision_appends_visual_metadata(monkeypatch,
     assert progress_updates[0]["phase"] == "vision"
     assert progress_updates[0]["message"] == "Preparing Cloud Vision enrichment for 1 track thumbnails..."
     assert progress_updates[-1]["message"] == "Cloud Vision analyzing track thumbnails (1/1)..."
+
+
+def test_enrich_track_summaries_with_vision_honors_cancel_check(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    thumbnail = store.PROCESSED_VIDEOS_DIR / "video-1" / "tracks" / "track-7.jpg"
+    thumbnail.parent.mkdir(parents=True, exist_ok=True)
+    thumbnail.write_bytes(b"fake-jpeg-bytes")
+
+    track = {
+        "id": "track-7",
+        "thumbnailPath": str(thumbnail.relative_to(store.BACKEND_DIR)),
+        "appearanceHints": ["upper clothing appears red"],
+        "appearanceSummary": "Representative crop suggests upper clothing appears red.",
+        "occlusionClass": None,
+        "bestArea": 3600.0,
+        "bestOffsetSeconds": 2.0,
+    }
+
+    monkeypatch.setattr(inference.vision, "track_enrichment_enabled", lambda: True)
+    monkeypatch.setattr(inference.vision, "track_enrichment_limit", lambda: 10)
+    monkeypatch.setattr(
+        inference.vision,
+        "enrich_track_thumbnail",
+        lambda path: pytest.fail("Cloud Vision enrichment should not run after cancellation."),
+    )
+
+    def progress_callback(payload: dict[str, object]) -> None:
+        return None
+
+    progress_callback.cancel_check = lambda: (_ for _ in ()).throw(InterruptedError("cancelled"))  # type: ignore[attr-defined]
+
+    with pytest.raises(InterruptedError, match="cancelled"):
+        inference._enrich_track_summaries_with_vision([track], progress_callback)
 
 
 def test_upload_video_runs_inference_and_persists_results(monkeypatch, tmp_path: Path) -> None:
@@ -694,6 +733,104 @@ def test_cancel_upload_endpoint_marks_upload_for_cancellation(monkeypatch, tmp_p
     assert final_status_response.json()["state"] == "cancelled"
 
 
+def test_stale_cancellation_requested_upload_recovers_to_cancelled(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+    recovered_at = "2026-04-10T09:30:00Z"
+    monkeypatch.setattr(store, "_utc_timestamp", lambda: recovered_at)
+
+    store.QUEUE_HISTORY_JSON_FILE.write_text(
+        json.dumps(
+            [
+                {
+                    "uploadId": "upload-stale-cancel",
+                    "state": "processing",
+                    "progressPercent": 39,
+                    "message": "Cancellation requested. Stopping upload...",
+                    "phase": "tracking",
+                    "videoId": "video-stale-cancel",
+                    "fileName": "clip.mp4",
+                    "locationId": "edsa-sec-walk",
+                    "locationName": "EDSA Sec Walk",
+                    "date": "2026-04-10",
+                    "startTime": "10:00:00",
+                    "endTime": "10:05:00",
+                    "createdAt": "2026-04-10T09:20:00Z",
+                    "startedAt": "2026-04-10T09:20:05Z",
+                    "updatedAt": "2026-04-10T09:22:00Z",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with store.UPLOAD_STATUS_LOCK:
+        store.UPLOAD_STATUSES.clear()
+        store.UPLOAD_CANCEL_REQUESTS.clear()
+
+    recovered = store.get_upload_status("upload-stale-cancel")
+
+    assert recovered is not None
+    assert recovered["state"] == "cancelled"
+    assert recovered["message"] == "Video upload cancelled."
+    assert recovered["progressPercent"] is None
+    assert recovered["phase"] is None
+    assert recovered["completedAt"] == recovered_at
+    assert recovered["updatedAt"] == recovered_at
+
+    persisted_history = json.loads(store.QUEUE_HISTORY_JSON_FILE.read_text(encoding="utf-8"))
+    assert persisted_history[0]["state"] == "cancelled"
+    assert persisted_history[0]["message"] == "Video upload cancelled."
+
+
+def test_stale_processing_upload_recovers_to_error_in_history_endpoint(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+    recovered_at = "2026-04-10T09:45:00Z"
+    monkeypatch.setattr(store, "_utc_timestamp", lambda: recovered_at)
+
+    store.QUEUE_HISTORY_JSON_FILE.write_text(
+        json.dumps(
+            [
+                {
+                    "uploadId": "upload-stale-processing",
+                    "state": "processing",
+                    "progressPercent": 61,
+                    "message": "Running detection and tracking...",
+                    "phase": "tracking",
+                    "videoId": "video-stale-processing",
+                    "fileName": "clip.mp4",
+                    "locationId": "edsa-sec-walk",
+                    "locationName": "EDSA Sec Walk",
+                    "date": "2026-04-10",
+                    "startTime": "11:00:00",
+                    "endTime": "11:05:00",
+                    "createdAt": "2026-04-10T09:40:00Z",
+                    "startedAt": "2026-04-10T09:40:05Z",
+                    "updatedAt": "2026-04-10T09:41:00Z",
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with store.UPLOAD_STATUS_LOCK:
+        store.UPLOAD_STATUSES.clear()
+        store.UPLOAD_CANCEL_REQUESTS.clear()
+
+    with TestClient(main.app) as client:
+        response = client.get("/api/videos/uploads/history")
+
+    assert response.status_code == 200
+    recovered = response.json()
+    assert len(recovered) == 1
+    assert recovered[0]["uploadId"] == "upload-stale-processing"
+    assert recovered[0]["state"] == "error"
+    assert recovered[0]["message"] == "Upload interrupted before completion. Please upload the video again."
+    assert recovered[0]["error"] == "Upload interrupted before completion. Please upload the video again."
+    assert recovered[0]["progressPercent"] is None
+    assert recovered[0]["phase"] is None
+    assert recovered[0]["completedAt"] == recovered_at
+
+
 def test_upload_video_cleans_up_when_inference_fails(monkeypatch, tmp_path: Path) -> None:
     configure_temp_storage(monkeypatch, tmp_path)
 
@@ -1046,6 +1183,72 @@ def test_search_endpoint_returns_ranked_pedestrian_track_matches(monkeypatch, tm
     assert body[0]["matchReason"] == "Head region and lower clothing are both described as blue."
 
 
+def test_search_endpoint_skips_query_parser_for_short_queries(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    state = store.seed_state()
+    state["videos"] = [
+        {
+            "id": "video-1",
+            "locationId": "edsa-sec-walk",
+            "location": "EDSA Sec Walk",
+            "timestamp": "10:00",
+            "date": "2026-03-17",
+            "startTime": "10:00",
+            "endTime": "10:30",
+            "gpsLat": 14.6397,
+            "gpsLng": 121.0775,
+            "pedestrianCount": 1,
+            "rawPath": None,
+            "processedPath": None,
+        }
+    ]
+    state["pedestrianTracks"] = [
+        {
+            "id": "track-blue",
+            "videoId": "video-1",
+            "pedestrianId": 7,
+            "location": "EDSA Sec Walk",
+            "firstTimestamp": "10:00:00 AM",
+            "lastTimestamp": "10:00:05 AM",
+            "bestTimestamp": "10:00:02 AM",
+            "firstFrame": 1,
+            "lastFrame": 12,
+            "bestFrame": 4,
+            "firstOffsetSeconds": 0.0,
+            "lastOffsetSeconds": 5.0,
+            "bestOffsetSeconds": 2.0,
+            "thumbnailPath": "storage/videos/processed/video-1/tracks/track-7.jpg",
+            "appearanceHints": ["head region appears blue", "lower clothing appears blue"],
+            "appearanceSummary": "Representative crop suggests head region appears blue, upper clothing appears white, lower clothing appears blue.",
+            "occlusionClass": None,
+            "bestArea": 4200.0,
+        }
+    ]
+    store.save_state(state)
+
+    parser_called = False
+
+    def fake_parse_search_query(query: str, locations: list[dict[str, object]]) -> dict[str, object]:
+        nonlocal parser_called
+        parser_called = True
+        return {}
+
+    monkeypatch.setattr(main.gemini, "parse_search_query", fake_parse_search_query)
+    monkeypatch.setattr(
+        main.gemini,
+        "rank_pedestrian_matches",
+        lambda query, candidates: [{"id": "track-blue", "confidence": 94, "reason": "Lower clothing appears blue."}],
+    )
+
+    with TestClient(main.app) as client:
+        response = client.get("/api/search", params={"query": "blue shorts"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["id"] == "track-blue"
+    assert parser_called is False
 def test_search_endpoint_returns_semantic_track_matches_without_gemini(monkeypatch, tmp_path: Path) -> None:
     configure_temp_storage(monkeypatch, tmp_path)
 
@@ -1848,11 +2051,15 @@ def test_search_endpoint_backfills_legacy_video_metadata(monkeypatch, tmp_path: 
     store.save_state(state)
 
     observed: dict[str, object] = {}
+    backfill_started = threading.Event()
+    allow_backfill_finish = threading.Event()
 
     def fake_run_video_inference(video_path: Path, model_name=None, video_record=None, fast_mode: bool = False, progress_callback=None):
         observed["video_path"] = video_path
         observed["video_id"] = video_record["id"]
         observed["fast_mode"] = fast_mode
+        backfill_started.set()
+        assert allow_backfill_finish.wait(timeout=3)
         return {
             "pedestrianCount": 1,
             "processedPath": str((store.PROCESSED_VIDEOS_DIR / video_record["id"] / "legacy.mp4").relative_to(store.BACKEND_DIR)),
@@ -1902,14 +2109,38 @@ def test_search_endpoint_backfills_legacy_video_metadata(monkeypatch, tmp_path: 
         ],
     )
 
-    with TestClient(main.app) as client:
-        response = client.get("/api/search", params={"query": "blue hat and blue shorts"})
+    search_response: dict[str, object] = {}
 
+    def perform_search() -> None:
+        with TestClient(main.app) as client:
+            search_response["response"] = client.get("/api/search", params={"query": "blue hat and blue shorts"})
+
+    search_thread = threading.Thread(target=perform_search)
+    search_thread.start()
+
+    assert backfill_started.wait(timeout=3)
+    search_thread.join(timeout=1)
+    assert not search_thread.is_alive()
+
+    response = search_response["response"]
     assert response.status_code == 200
-    body = response.json()
+    assert response.json() == []
+
+    allow_backfill_finish.set()
+    backfill_thread = main.SEARCH_BACKFILL_THREAD
+    assert backfill_thread is not None
+    backfill_thread.join(timeout=3)
+    assert not backfill_thread.is_alive()
+
     assert observed["video_path"] == raw_file
     assert observed["video_id"] == "legacy-video-1"
     assert observed["fast_mode"] is False
+
+    with TestClient(main.app) as client:
+        follow_up_response = client.get("/api/search", params={"query": "blue hat and blue shorts"})
+
+    assert follow_up_response.status_code == 200
+    body = follow_up_response.json()
     assert len(body) == 1
     assert body[0]["id"] == "track-legacy"
     assert body[0]["offsetSeconds"] == 2.0

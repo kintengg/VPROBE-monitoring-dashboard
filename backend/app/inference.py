@@ -522,6 +522,12 @@ def _track_thumbnail_file(track_summary: dict[str, Any]) -> Optional[Path]:
     return candidate if candidate.exists() else None
 
 
+def _run_cancel_check(progress_callback: Optional[Callable[[dict[str, Any]], None]]) -> None:
+    cancel_check = getattr(progress_callback, "cancel_check", None)
+    if callable(cancel_check):
+        cancel_check()
+
+
 def _enrich_track_summaries_with_vision(
     track_summaries: list[dict[str, Any]],
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None,
@@ -550,6 +556,8 @@ def _enrich_track_summaries_with_vision(
     if not selected_tracks:
         return 0
 
+    _run_cancel_check(progress_callback)
+
     if progress_callback is not None:
         progress_callback(
             {
@@ -562,7 +570,9 @@ def _enrich_track_summaries_with_vision(
     enriched_count = 0
     total_selected = len(selected_tracks)
     for index, (track_summary, thumbnail_file) in enumerate(selected_tracks, start=1):
+        _run_cancel_check(progress_callback)
         metadata = vision.enrich_track_thumbnail(thumbnail_file)
+        _run_cancel_check(progress_callback)
         if not metadata:
             if progress_callback is not None:
                 progress_callback(
@@ -657,10 +667,13 @@ def run_video_inference(
     track_sample_indexes: dict[int, dict[int, int]] = {}
     last_reported_percent = -1
 
+    _run_cancel_check(progress_callback)
+
     if progress_callback is not None:
         progress_callback({"progressPercent": 0, "phase": "tracking", "message": "Initializing detection and tracking..."})
 
     for frame_index, result in enumerate(model.track(**track_kwargs), start=1):
+        _run_cancel_check(progress_callback)
         boxes = getattr(result, "boxes", None)
         if boxes is None:
             continue
@@ -669,6 +682,7 @@ def run_video_inference(
 
         frame_people = 0
         for box in boxes:
+            _run_cancel_check(progress_callback)
             frame_people += 1
             track_id = None
             if getattr(box, "is_track", False):
@@ -827,7 +841,9 @@ def run_video_inference(
         )
 
     track_results = list(pedestrian_tracks.values())
+    _run_cancel_check(progress_callback)
     _enrich_track_summaries_with_vision(track_results, progress_callback)
+    _run_cancel_check(progress_callback)
 
     if progress_callback is not None:
         progress_callback({"progressPercent": 99, "phase": "finalizing", "message": "Finalizing processed video..."})

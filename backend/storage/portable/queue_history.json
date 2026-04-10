@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "uploadId": "c75dc105-d862-45b3-9ac3-cad13b401305",
+    "state": "complete",
+    "progressPercent": 100,
+    "message": "Video upload and processing complete.",
+    "phase": "ptsi",
+    "videoId": "97b2e149",
+    "error": null,
+    "fileName": "2.mp4",
+    "locationId": "gate-1-walkway",
+    "locationName": "Gate 1 Walkway",
+    "date": "2026-04-01",
+    "startTime": "10:10:10",
+    "endTime": "10:15:10",
+    "fastMode": false,
+    "createdAt": "2026-04-09T23:50:35Z",
+    "startedAt": "2026-04-09T23:50:35Z",
+    "completedAt": "2026-04-10T00:01:29Z",
+    "updatedAt": "2026-04-10T00:01:29Z"
+  }
+]

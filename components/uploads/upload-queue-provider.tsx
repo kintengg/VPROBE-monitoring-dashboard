@@ -13,6 +13,8 @@ type UploadPhase = VideoUploadStatus["phase"]
 
 const UPLOAD_STATES: UploadState[] = ["queued", "processing", "complete", "error", "cancelled"]
 const UPLOAD_PHASES: NonNullable<UploadPhase>[] = ["queued", "tracking", "vision", "ptsi", "finalizing"]
+const CANCELLATION_REQUESTED_MESSAGE_PREFIX = "cancellation requested"
+const RECOVERED_INTERRUPTED_UPLOAD_MESSAGE = "This upload was interrupted before completion. Please add the video again."
 
 export interface EnqueuedUploadInput {
   file: File
@@ -75,6 +77,10 @@ function createQueueItemId() {
 
 function isTerminalState(state: UploadState) {
   return state === "complete" || state === "error" || state === "cancelled"
+}
+
+function messageRequestsCancellation(message: string | null | undefined) {
+  return typeof message === "string" && message.trim().toLowerCase().startsWith(CANCELLATION_REQUESTED_MESSAGE_PREFIX)
 }
 
 function isUploadState(value: unknown): value is UploadState {
@@ -182,13 +188,14 @@ function createUploadFromHistory(status: VideoUploadStatus): UploadQueueItem {
     updatedAt,
     startedAt: status.startedAt ?? (status.state === "queued" ? null : createdAt),
     completedAt: status.completedAt ?? (isTerminalState(status.state) ? updatedAt : null),
-    cancellationRequested: status.state === "cancelled",
+    cancellationRequested: !isTerminalState(status.state) && messageRequestsCancellation(status.message),
   }
 }
 
 function mergeUploadsWithHistory(currentUploads: UploadQueueItem[], history: VideoUploadStatus[]) {
   const historyByUploadId = new Map(history.map((status) => [status.uploadId, status]))
   const seenUploadIds = new Set<string>()
+  const recoveredAt = new Date().toISOString()
 
   const mergedUploads = currentUploads.map((upload) => {
     if (!upload.uploadId) {
@@ -197,7 +204,11 @@ function mergeUploadsWithHistory(currentUploads: UploadQueueItem[], history: Vid
 
     const historyStatus = historyByUploadId.get(upload.uploadId)
     if (!historyStatus) {
-      return upload
+      if (upload.file || isTerminalState(upload.state)) {
+        return upload
+      }
+
+      return settleMissingBackendUpload(upload, recoveredAt)
     }
 
     seenUploadIds.add(upload.uploadId)
@@ -295,9 +306,31 @@ function applyStatusToUpload(current: UploadQueueItem, status: VideoUploadStatus
     videoId: status.videoId ?? current.videoId,
     error: status.state === "error" ? status.error ?? current.error : null,
     updatedAt: status.updatedAt,
-    startedAt: current.startedAt ?? status.updatedAt,
-    completedAt: isTerminalState(status.state) ? status.updatedAt : current.completedAt,
+    startedAt: current.startedAt ?? status.startedAt ?? status.updatedAt,
+    completedAt: isTerminalState(status.state) ? status.completedAt ?? status.updatedAt : current.completedAt,
+    cancellationRequested: !isTerminalState(status.state) && (current.cancellationRequested || messageRequestsCancellation(status.message)),
   }
+}
+
+function settleMissingBackendUpload(upload: UploadQueueItem, recoveredAt: string): UploadQueueItem {
+  const cancelled = upload.cancellationRequested || messageRequestsCancellation(upload.message)
+  const message = cancelled ? "Video upload cancelled." : RECOVERED_INTERRUPTED_UPLOAD_MESSAGE
+
+  return {
+    ...upload,
+    state: cancelled ? "cancelled" : "error",
+    progressPercent: null,
+    message,
+    phase: null,
+    error: cancelled ? null : message,
+    updatedAt: recoveredAt,
+    completedAt: recoveredAt,
+    cancellationRequested: false,
+  }
+}
+
+function isMissingUploadStatusError(error: unknown) {
+  return error instanceof Error && error.message.includes("Upload status not found")
 }
 
 function sortUploadsForDisplay(left: UploadQueueItem, right: UploadQueueItem) {
@@ -463,12 +496,20 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
             return
           }
 
-          const status = await getVideoUploadStatus(upload.uploadId)
-          if (isCancelled) {
-            return
-          }
+          try {
+            const status = await getVideoUploadStatus(upload.uploadId)
+            if (isCancelled) {
+              return
+            }
 
-          updateUpload(upload.id, (current) => applyStatusToUpload(current, status))
+            updateUpload(upload.id, (current) => applyStatusToUpload(current, status))
+          } catch (error) {
+            if (isCancelled || !isMissingUploadStatusError(error)) {
+              return
+            }
+
+            updateUpload(upload.id, (current) => settleMissingBackendUpload(current, new Date().toISOString()))
+          }
         }),
       )
     }

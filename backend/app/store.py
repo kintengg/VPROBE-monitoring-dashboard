@@ -180,9 +180,14 @@ SEARCH_CAMERA_AMBIGUOUS_COLOR_MATCHES = {
 QUERY_COLOR_JOINERS = {"and", "or"}
 QUERY_COLOR_MODIFIERS = {"dark", "light"}
 MAX_AI_SEARCH_CANDIDATES = 24
+SEARCH_QUERY_PARSER_MIN_TOKENS = 6
 UPLOAD_STATUS_LOCK = Lock()
 UPLOAD_STATUSES: dict[str, dict[str, Any]] = {}
 UPLOAD_CANCEL_REQUESTS: set[str] = set()
+TERMINAL_UPLOAD_STATES = {"complete", "error", "cancelled"}
+UPLOAD_CANCEL_REQUESTED_MESSAGE_PREFIX = "cancellation requested"
+RECOVERED_CANCELLED_UPLOAD_MESSAGE = "Video upload cancelled."
+RECOVERED_INTERRUPTED_UPLOAD_MESSAGE = "Upload interrupted before completion. Please upload the video again."
 UPLOAD_HISTORY_CSV_FIELDS = (
     "uploadId",
     "state",
@@ -320,6 +325,50 @@ def _normalize_upload_status_record(record: Any) -> Optional[dict[str, Any]]:
     }
 
 
+def _is_terminal_upload_state(state: Any) -> bool:
+    return isinstance(state, str) and state in TERMINAL_UPLOAD_STATES
+
+
+def _upload_message_requests_cancellation(message: Any) -> bool:
+    return isinstance(message, str) and message.strip().lower().startswith(UPLOAD_CANCEL_REQUESTED_MESSAGE_PREFIX)
+
+
+def _recover_interrupted_upload_statuses(statuses: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not statuses:
+        return statuses
+
+    recovered_at = _utc_timestamp()
+    recovered_statuses: list[dict[str, Any]] = []
+    changed = False
+
+    for status in statuses:
+        if _is_terminal_upload_state(status.get("state")):
+            recovered_statuses.append(status)
+            continue
+
+        recovered = deepcopy(status)
+        if _upload_message_requests_cancellation(status.get("message")):
+            recovered["state"] = "cancelled"
+            recovered["message"] = RECOVERED_CANCELLED_UPLOAD_MESSAGE
+            recovered["error"] = None
+        else:
+            recovered["state"] = "error"
+            recovered["message"] = RECOVERED_INTERRUPTED_UPLOAD_MESSAGE
+            recovered["error"] = RECOVERED_INTERRUPTED_UPLOAD_MESSAGE
+
+        recovered["phase"] = None
+        recovered["progressPercent"] = None
+        recovered["completedAt"] = recovered_at
+        recovered["updatedAt"] = recovered_at
+        recovered_statuses.append(recovered)
+        changed = True
+
+    if changed:
+        _persist_upload_status_snapshot(recovered_statuses)
+
+    return recovered_statuses
+
+
 def _read_upload_status_history() -> list[dict[str, Any]]:
     ensure_storage_layout()
     if not QUEUE_HISTORY_JSON_FILE.exists():
@@ -356,13 +405,14 @@ def _ensure_upload_statuses_loaded() -> None:
         if UPLOAD_STATUSES:
             return
 
-    statuses = _read_upload_status_history()
+    statuses = _recover_interrupted_upload_statuses(_read_upload_status_history())
     if not statuses:
         return
 
     with UPLOAD_STATUS_LOCK:
         if UPLOAD_STATUSES:
             return
+        UPLOAD_CANCEL_REQUESTS.clear()
         UPLOAD_STATUSES.update({status["uploadId"]: status for status in statuses})
 
 
@@ -410,7 +460,7 @@ def set_upload_status(
             "updatedAt": timestamp,
         }
         UPLOAD_STATUSES[upload_id] = status
-        if state in {"complete", "error", "cancelled"}:
+        if state in TERMINAL_UPLOAD_STATES:
             UPLOAD_CANCEL_REQUESTS.discard(upload_id)
         snapshot = [deepcopy(item) for item in UPLOAD_STATUSES.values()]
 
@@ -3194,7 +3244,7 @@ def _build_search_query_plan(
     local_region_requirements = _query_region_color_requirements(appearance_query or stripped_query)
 
     parsed_query: dict[str, Any] = {}
-    if query_parser is not None and stripped_query:
+    if query_parser is not None and stripped_query and _should_parse_search_query(stripped_query):
         try:
             parsed_query = query_parser(stripped_query, _location_context_payload(locations)) or {}
         except Exception:
@@ -3226,6 +3276,10 @@ def _build_search_query_plan(
 
 def _query_tokens(query: str) -> list[str]:
     return [term for term in re.split(r"[^a-z0-9]+", query.lower()) if term]
+
+
+def _should_parse_search_query(query: str) -> bool:
+    return len(_query_tokens(query)) >= SEARCH_QUERY_PARSER_MIN_TOKENS
 
 
 def _find_phrase_mentions(tokens: list[str], aliases_by_name: dict[str, tuple[str, ...]]) -> list[tuple[int, int, str]]:
