@@ -36,6 +36,8 @@ interface AddVideoModalProps {
   }) => void | Promise<void>
 }
 
+const MAX_VISIBLE_FILE_NAME_CHARS = 48
+
 function formatDurationHours(durationSeconds: number) {
   const precision = durationSeconds < 60 ? 5 : durationSeconds < 3600 ? 4 : 2
   return (durationSeconds / 3600).toFixed(precision).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
@@ -56,6 +58,22 @@ function formatHumanDuration(totalSeconds: number) {
   ].filter(Boolean)
 
   return parts.join(" ")
+}
+
+function formatDisplayFileName(fileName: string, maxChars = MAX_VISIBLE_FILE_NAME_CHARS) {
+  if (fileName.length <= maxChars) {
+    return fileName
+  }
+
+  const extensionIndex = fileName.lastIndexOf(".")
+  const hasExtension = extensionIndex > 0 && extensionIndex < fileName.length - 1
+  const extension = hasExtension ? fileName.slice(extensionIndex) : ""
+  const baseName = hasExtension ? fileName.slice(0, extensionIndex) : fileName
+  const availableBaseChars = Math.max(8, maxChars - extension.length - 3)
+  const headChars = Math.max(4, Math.ceil(availableBaseChars * 0.6))
+  const tailChars = Math.max(3, availableBaseChars - headChars)
+
+  return `${baseName.slice(0, headChars)}...${baseName.slice(-tailChars)}${extension}`
 }
 
 function computeSchedule(startTime: string, durationHours: string) {
@@ -91,26 +109,74 @@ function readVideoDuration(file: File) {
   return new Promise<number>((resolve, reject) => {
     const video = document.createElement("video")
     const objectUrl = URL.createObjectURL(file)
+    let settled = false
+    let timeoutId: number | null = null
 
     const cleanup = () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+      video.onloadedmetadata = null
+      video.ondurationchange = null
+      video.onseeked = null
+      video.onerror = null
       URL.revokeObjectURL(objectUrl)
       video.removeAttribute("src")
+      video.load()
+    }
+
+    const finish = (callback: () => void) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      cleanup()
+      callback()
+    }
+
+    const resolveIfDurationReady = () => {
+      const duration = Number(video.duration)
+      if (Number.isFinite(duration) && duration > 0) {
+        finish(() => resolve(duration))
+        return true
+      }
+
+      return false
+    }
+
+    const rejectWithReadableMessage = () => {
+      finish(() => reject(new Error("Couldn't auto-read this video's duration in the browser. You can still enter the duration manually.")))
     }
 
     video.preload = "metadata"
+    video.muted = true
+    video.playsInline = true
     video.onloadedmetadata = () => {
-      const duration = Number(video.duration)
-      cleanup()
-      if (Number.isFinite(duration) && duration > 0) {
-        resolve(duration)
+      if (resolveIfDurationReady()) {
         return
       }
-      reject(new Error("The selected video does not expose a readable duration."))
+
+      try {
+        video.currentTime = Number.MAX_SAFE_INTEGER
+      } catch {
+        rejectWithReadableMessage()
+      }
     }
-    video.onerror = () => {
-      cleanup()
-      reject(new Error("Could not read the selected video's duration."))
+    video.ondurationchange = () => {
+      resolveIfDurationReady()
     }
+    video.onseeked = () => {
+      if (!resolveIfDurationReady()) {
+        rejectWithReadableMessage()
+      }
+    }
+    video.onerror = () => rejectWithReadableMessage()
+
+    timeoutId = window.setTimeout(() => {
+      rejectWithReadableMessage()
+    }, 5000)
+
     video.src = objectUrl
   })
 }
@@ -343,12 +409,14 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
               />
 
               {selectedFile ? (
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                     <FileVideo className="w-5 h-5 text-primary" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{selectedFile.name}</p>
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <p className="overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground" title={selectedFile.name}>
+                      {formatDisplayFileName(selectedFile.name)}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                     </p>
@@ -366,7 +434,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
                     size="icon"
                     onClick={() => setSelectedFile(null)}
                     disabled={isSubmitting}
-                    className="h-8 w-8"
+                    className="h-8 w-8 shrink-0"
                   >
                     <X className="w-4 h-4" />
                   </Button>

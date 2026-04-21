@@ -1,0 +1,203 @@
+{
+  "generatedAt": "2026-04-21T11:57:34Z",
+  "video": {
+    "id": "916bd20d",
+    "locationId": "ateneo-gate-1-entrance",
+    "location": "Ateneo Gate 1 Entrance",
+    "timestamp": "10:23:20",
+    "date": "2025-01-23",
+    "startTime": "10:23:20",
+    "endTime": "10:24:20",
+    "gpsLat": 14.635219399999999,
+    "gpsLng": 121.07545560000001,
+    "pedestrianCount": 54,
+    "rawPath": "storage/videos/raw/177e200d-Gate-1_minute_21_clip.mp4",
+    "processedPath": "storage/videos/processed/916bd20d/177e200d-Gate-1_minute_21_clip.mp4"
+  },
+  "location": {
+    "id": "ateneo-gate-1-entrance",
+    "name": "Ateneo Gate 1 Entrance",
+    "latitude": 14.635219399999999,
+    "longitude": 121.07545560000001,
+    "description": "",
+    "address": "Blue Eagle Gym, Quezon City, Metro Manila",
+    "roiCoordinates": {
+      "referenceSize": [
+        3014,
+        1700
+      ],
+      "includePolygonsNorm": [
+        [
+          [
+            0.106228,
+            0.3528
+          ],
+          [
+            0.178898,
+            0.357824
+          ],
+          [
+            0.223245,
+            0.384588
+          ],
+          [
+            0.29781,
+            0.533471
+          ],
+          [
+            0.316669,
+            0.792829
+          ],
+          [
+            0.405375,
+            0.9936
+          ],
+          [
+            0.14492,
+            0.996947
+          ],
+          [
+            0.128875,
+            0.759365
+          ]
+        ]
+      ]
+    },
+    "entryExitPoints": {
+      "referenceSize": [
+        3014,
+        1700
+      ],
+      "gateDirectionZonesNorm": {
+        "strip_0": [
+          [
+            0.085956,
+            0.844688
+          ],
+          [
+            0.330843,
+            0.7885
+          ],
+          [
+            0.353892,
+            0.839582
+          ],
+          [
+            0.081151,
+            0.900876
+          ]
+        ],
+        "strip_1": [
+          [
+            0.127561,
+            0.736065
+          ],
+          [
+            0.293792,
+            0.693112
+          ],
+          [
+            0.307157,
+            0.719771
+          ],
+          [
+            0.127143,
+            0.767165
+          ]
+        ],
+        "strip_2": [
+          [
+            0.119035,
+            0.670306
+          ],
+          [
+            0.297545,
+            0.622765
+          ],
+          [
+            0.305906,
+            0.649824
+          ],
+          [
+            0.118679,
+            0.696529
+          ]
+        ]
+      },
+      "directionMapping": {
+        "path_0_1_2": "exiting",
+        "path_2_1_0": "entering"
+      }
+    },
+    "walkableAreaM2": null
+  },
+  "counts": {
+    "pedestrianCount": 54,
+    "eventCount": 50,
+    "trackCount": 54,
+    "trajectorySampleCount": 199,
+    "timelineRowCount": 60,
+    "wholeFootageLogRowCount": 133,
+    "severityBucketCount": 9
+  },
+  "severitySummary": {
+    "bucketCount": 24,
+    "sampledSeconds": 56,
+    "buckets": [
+      {
+        "startOffsetSeconds": 0.0,
+        "endOffsetSeconds": 7.5,
+        "severity": "moderate",
+        "score": 54.1
+      },
+      {
+        "startOffsetSeconds": 7.5,
+        "endOffsetSeconds": 17.5,
+        "severity": "light",
+        "score": 29.12
+      },
+      {
+        "startOffsetSeconds": 17.5,
+        "endOffsetSeconds": 22.5,
+        "severity": "moderate",
+        "score": 36.44
+      },
+      {
+        "startOffsetSeconds": 22.5,
+        "endOffsetSeconds": 27.5,
+        "severity": "light",
+        "score": 27.9
+      },
+      {
+        "startOffsetSeconds": 27.5,
+        "endOffsetSeconds": 30.0,
+        "severity": "moderate",
+        "score": 39.7
+      },
+      {
+        "startOffsetSeconds": 30.0,
+        "endOffsetSeconds": 32.5,
+        "severity": "light",
+        "score": 25.33
+      },
+      {
+        "startOffsetSeconds": 32.5,
+        "endOffsetSeconds": 35.0,
+        "severity": "neutral",
+        "score": null
+      },
+      {
+        "startOffsetSeconds": 35.0,
+        "endOffsetSeconds": 45.0,
+        "severity": "light",
+        "score": 30.15
+      },
+      {
+        "startOffsetSeconds": 45.0,
+        "endOffsetSeconds": 60.0,
+        "severity": "moderate",
+        "score": 58.5
+      }
+    ]
+  }
+}

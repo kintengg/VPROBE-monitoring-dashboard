@@ -8,7 +8,7 @@ import os
 import re
 import shutil
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -67,6 +67,34 @@ DEFAULT_EDSA_SEC_WALK_ROI = {
         [[0.221693, 0.094250], [0.346099, 0.244907], [0.344297, 0.187213]],
     ],
 }
+DEFAULT_EDSA_SEC_WALK_ENTRY_EXIT_POINTS = {
+    "referenceSize": [1920, 1080],
+    "gateDirectionZonesNorm": {
+        "strip_0": [
+            [0.741958, 0.623528],
+            [0.222411, 0.813509],
+            [0.217198, 0.767167],
+            [0.716766, 0.594185],
+        ],
+        "strip_1": [
+            [0.785417, 0.682222],
+            [0.231094, 0.915463],
+            [0.227604, 0.884537],
+            [0.768021, 0.668333],
+        ],
+        "strip_2": [
+            [0.860104, 0.768704],
+            [0.253589, 1.000000],
+            [0.242292, 0.999630],
+            [0.239786, 0.964870],
+            [0.842708, 0.747130],
+        ],
+    },
+    "directionMapping": {
+        "path_0_1_2": "exiting",
+        "path_2_1_0": "entering",
+    },
+}
 LOCATION_PERSISTED_FIELDS = (
     "id",
     "name",
@@ -75,6 +103,7 @@ LOCATION_PERSISTED_FIELDS = (
     "description",
     "address",
     "roiCoordinates",
+    "entryExitPoints",
     "walkableAreaM2",
 )
 SEARCH_STOPWORDS = {
@@ -963,6 +992,7 @@ def seed_state() -> dict[str, Any]:
                 "description": "Approximate Xavier Hall camera anchor along the EDSA security walkway.",
                 "address": "Ateneo de Manila University · Xavier Hall",
                 "roiCoordinates": deepcopy(DEFAULT_EDSA_SEC_WALK_ROI),
+                "entryExitPoints": deepcopy(DEFAULT_EDSA_SEC_WALK_ENTRY_EXIT_POINTS),
                 "walkableAreaM2": None,
             },
             {
@@ -973,6 +1003,7 @@ def seed_state() -> dict[str, Any]:
                 "description": "Approximate Kostka Hall pedestrian corridor camera anchor.",
                 "address": "Ateneo de Manila University · Kostka Hall",
                 "roiCoordinates": None,
+                "entryExitPoints": None,
                 "walkableAreaM2": None,
             },
             {
@@ -983,6 +1014,7 @@ def seed_state() -> dict[str, Any]:
                 "description": "Approximate Gate 1 walkway camera anchor.",
                 "address": "Ateneo de Manila University · Gate 1",
                 "roiCoordinates": None,
+                "entryExitPoints": None,
                 "walkableAreaM2": None,
             },
             {
@@ -993,6 +1025,7 @@ def seed_state() -> dict[str, Any]:
                 "description": "Approximate Gate 3 walkway camera anchor.",
                 "address": "Ateneo de Manila University · Gate 3",
                 "roiCoordinates": None,
+                "entryExitPoints": None,
                 "walkableAreaM2": None,
             },
         ],
@@ -1035,12 +1068,35 @@ def load_state() -> dict[str, Any]:
         if "roiCoordinates" not in location:
             location["roiCoordinates"] = None
             changed = True
+        if "entryExitPoints" not in location:
+            location["entryExitPoints"] = None
+            changed = True
         if "walkableAreaM2" not in location:
             location["walkableAreaM2"] = None
             changed = True
         if location.get("id") == "edsa-sec-walk" and not location.get("roiCoordinates"):
             location["roiCoordinates"] = deepcopy(DEFAULT_EDSA_SEC_WALK_ROI)
             changed = True
+        normalized_entry_exit_points = _normalized_entry_exit_points(location)
+        if location.get("id") == "edsa-sec-walk":
+            if normalized_entry_exit_points is None:
+                location["entryExitPoints"] = deepcopy(DEFAULT_EDSA_SEC_WALK_ENTRY_EXIT_POINTS)
+                changed = True
+            elif (
+                normalized_entry_exit_points.get("gateDirectionZonesNorm")
+                == DEFAULT_EDSA_SEC_WALK_ENTRY_EXIT_POINTS["gateDirectionZonesNorm"]
+                and normalized_entry_exit_points.get("directionMapping")
+                != DEFAULT_EDSA_SEC_WALK_ENTRY_EXIT_POINTS["directionMapping"]
+            ):
+                location["entryExitPoints"] = deepcopy(DEFAULT_EDSA_SEC_WALK_ENTRY_EXIT_POINTS)
+                changed = True
+            elif location.get("entryExitPoints") != normalized_entry_exit_points:
+                location["entryExitPoints"] = normalized_entry_exit_points
+                changed = True
+        elif location.get("entryExitPoints") is not None and normalized_entry_exit_points is not None:
+            if location.get("entryExitPoints") != normalized_entry_exit_points:
+                location["entryExitPoints"] = normalized_entry_exit_points
+                changed = True
 
     for track in state.get("pedestrianTracks", []):
         if not isinstance(track.get("trajectorySamples"), list):
@@ -1172,6 +1228,7 @@ def update_location(location_id: str, payload: dict[str, Any]) -> dict[str, Any]
             "description": payload.get("description", ""),
             "address": payload.get("address", ""),
             "roiCoordinates": payload.get("roiCoordinates"),
+                "entryExitPoints": payload.get("entryExitPoints"),
             "walkableAreaM2": payload.get("walkableAreaM2"),
         }
     )
@@ -1298,6 +1355,7 @@ def get_video_detail(video_id: str) -> Optional[dict[str, Any]]:
     detail = deepcopy(video)
     detail["severitySummary"] = _video_severity_summary(state, detail)
     detail["pedestrianTracks"] = _video_detail_pedestrian_tracks(state, video_id)
+    detail["directionalEvents"] = _video_directional_events(state, detail)
     return detail
 
 
@@ -1586,12 +1644,12 @@ def _normalized_foot_point(track: dict[str, Any]) -> Optional[tuple[float, float
     return (x_value, y_value)
 
 
-def _trajectory_sample_second(sample: Any) -> Optional[int]:
+def _trajectory_sample_second(sample: Any) -> Optional[float]:
     if not isinstance(sample, (list, tuple)) or not sample:
         return None
 
     try:
-        return max(0, int(round(float(sample[0]))))
+        return max(0.0, float(sample[0]))
     except (TypeError, ValueError):
         return None
 
@@ -1634,20 +1692,20 @@ def _legacy_track_trajectory_samples(track: dict[str, Any]) -> list[list[Any]]:
         raw_offset = track.get("lastOffsetSeconds")
 
     try:
-        offset_seconds = max(0, int(round(float(raw_offset))))
+        offset_seconds = max(0.0, float(raw_offset))
     except (TypeError, ValueError):
-        offset_seconds = 0
+        offset_seconds = 0.0
 
     return [[offset_seconds, foot_point[0], foot_point[1], track.get("occlusionClass")]]
 
 
-def _normalized_trajectory_samples(track: dict[str, Any]) -> list[tuple[int, tuple[float, float], Optional[int]]]:
+def _normalized_trajectory_samples(track: dict[str, Any]) -> list[tuple[float, tuple[float, float], Optional[int]]]:
     raw_samples = track.get("trajectorySamples")
     sample_sets = [raw_samples] if isinstance(raw_samples, list) else []
     sample_sets.append(_legacy_track_trajectory_samples(track))
 
     for candidate_samples in sample_sets:
-        normalized: list[tuple[int, tuple[float, float], Optional[int]]] = []
+        normalized: list[tuple[float, tuple[float, float], Optional[int]]] = []
         for sample in candidate_samples:
             offset_second = _trajectory_sample_second(sample)
             point = _trajectory_sample_point(sample)
@@ -1691,7 +1749,7 @@ def _normalized_roi_polygons(location: dict[str, Any]) -> list[list[tuple[float,
     return polygons
 
 
-def _point_on_segment(point: tuple[float, float], start: tuple[float, float], end: tuple[float, float]) -> bool:
+def _point_on_segment(point: tuple[float, float], start: Sequence[float], end: Sequence[float]) -> bool:
     x_value, y_value = point
     x1, y1 = start
     x2, y2 = end
@@ -1704,7 +1762,7 @@ def _point_on_segment(point: tuple[float, float], start: tuple[float, float], en
     )
 
 
-def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
+def _point_in_polygon(point: tuple[float, float], polygon: list[Sequence[float]]) -> bool:
     inside = False
     previous_point = polygon[-1]
     for current_point in polygon:
@@ -1721,6 +1779,235 @@ def _point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, flo
             inside = not inside
         previous_point = current_point
     return inside
+
+
+def _normalized_entry_exit_points(location: dict[str, Any]) -> Optional[dict[str, Any]]:
+    entry_exit_points = location.get("entryExitPoints")
+    if not isinstance(entry_exit_points, dict):
+        return None
+
+    reference_size = entry_exit_points.get("referenceSize")
+    if (
+        not isinstance(reference_size, list)
+        or len(reference_size) != 2
+        or any(not isinstance(value, (int, float)) or float(value) <= 0 for value in reference_size)
+    ):
+        return None
+
+    zones = entry_exit_points.get("gateDirectionZonesNorm")
+    if not isinstance(zones, dict):
+        return None
+
+    normalized_zones: dict[str, list[list[float]]] = {}
+    strip_name_mapping: tuple[tuple[str, str], ...]
+    if all(strip_name in zones for strip_name in ("strip_0", "strip_1", "strip_2")):
+        strip_name_mapping = (("strip_0", "strip_0"), ("strip_1", "strip_1"), ("strip_2", "strip_2"))
+    elif all(zone_name in zones for zone_name in ("zone_far", "zone_mid", "zone_near")):
+        strip_name_mapping = (("zone_far", "strip_0"), ("zone_mid", "strip_1"), ("zone_near", "strip_2"))
+    else:
+        return None
+
+    for raw_strip_name, normalized_strip_name in strip_name_mapping:
+        raw_polygon = zones.get(raw_strip_name)
+        if not isinstance(raw_polygon, list) or len(raw_polygon) < 3:
+            return None
+
+        polygon: list[list[float]] = []
+        for raw_point in raw_polygon:
+            if not isinstance(raw_point, (list, tuple)) or len(raw_point) != 2:
+                return None
+
+            try:
+                x_value = float(raw_point[0])
+                y_value = float(raw_point[1])
+            except (TypeError, ValueError):
+                return None
+
+            if not (0.0 <= x_value <= 1.0 and 0.0 <= y_value <= 1.0):
+                return None
+
+            polygon.append([x_value, y_value])
+
+        normalized_zones[normalized_strip_name] = polygon
+
+    direction_mapping = entry_exit_points.get("directionMapping")
+    if not isinstance(direction_mapping, dict):
+        return None
+
+    path_0_1_2 = direction_mapping.get("path_0_1_2")
+    path_2_1_0 = direction_mapping.get("path_2_1_0")
+    if path_0_1_2 is None or path_2_1_0 is None:
+        path_0_1_2 = direction_mapping.get("far_to_mid_to_near")
+        path_2_1_0 = direction_mapping.get("near_to_mid_to_far")
+
+    if path_0_1_2 not in {"entering", "exiting"} or path_2_1_0 not in {"entering", "exiting"}:
+        return None
+    if path_0_1_2 == path_2_1_0:
+        return None
+
+    return {
+        "referenceSize": [int(reference_size[0]), int(reference_size[1])],
+        "gateDirectionZonesNorm": normalized_zones,
+        "directionMapping": {
+            "path_0_1_2": path_0_1_2,
+            "path_2_1_0": path_2_1_0,
+        },
+    }
+
+
+def _directional_zone_for_point(point: tuple[float, float], config: dict[str, Any]) -> Optional[str]:
+    matching_zones = [
+        zone_name
+        for zone_name, polygon in config["gateDirectionZonesNorm"].items()
+        if _point_in_polygon(point, polygon)
+    ]
+    if len(matching_zones) != 1:
+        return None
+    return matching_zones[0]
+
+
+def _interpolated_trajectory_points(track: dict[str, Any]) -> list[tuple[float, tuple[float, float]]]:
+    samples = sorted(_normalized_trajectory_samples(track), key=lambda sample: sample[0])
+    if not samples:
+        return []
+
+    interpolated: list[tuple[float, tuple[float, float]]] = []
+    for index, (offset_second, point, _occlusion_class) in enumerate(samples):
+        current_offset = float(offset_second)
+        interpolated.append((current_offset, point))
+
+        if index + 1 >= len(samples):
+            continue
+
+        next_offset_second, next_point, _next_occlusion_class = samples[index + 1]
+        next_offset = float(next_offset_second)
+        segment_duration = max(next_offset - current_offset, 0.0)
+        if segment_duration <= 0:
+            continue
+
+        delta_x = next_point[0] - point[0]
+        delta_y = next_point[1] - point[1]
+        segment_distance = math.hypot(delta_x, delta_y)
+        interpolation_steps = max(int(math.ceil(segment_duration * 6.0)), int(math.ceil(segment_distance / 0.02)), 1)
+
+        for step in range(1, interpolation_steps):
+            progress = step / interpolation_steps
+            interpolated.append(
+                (
+                    current_offset + (segment_duration * progress),
+                    (point[0] + (delta_x * progress), point[1] + (delta_y * progress)),
+                )
+            )
+
+    return interpolated
+
+
+def _track_directional_events(track: dict[str, Any], location: dict[str, Any], fallback_track_id: str) -> list[dict[str, Any]]:
+    config = _normalized_entry_exit_points(location)
+    if config is None:
+        return []
+
+    track_id = str(track.get("id") or fallback_track_id)
+
+    def _visit_midpoint(visit: dict[str, Any]) -> float:
+        start = float(visit.get("offsetSeconds") or 0.0)
+        end = float(visit.get("lastOffsetSeconds") or start)
+        if end < start:
+            return start
+        return start + ((end - start) / 2.0)
+
+    def _transition_midpoint(previous_visit: dict[str, Any], current_visit: dict[str, Any]) -> float:
+        start = float(previous_visit.get("lastOffsetSeconds") or previous_visit.get("offsetSeconds") or 0.0)
+        end = float(current_visit.get("offsetSeconds") or start)
+        if end <= start:
+            return _visit_midpoint(current_visit)
+        return start + ((end - start) / 2.0)
+
+    def _build_directional_event(mapping_key: str, event_offset: float) -> dict[str, Any]:
+        return {
+            "trackId": track_id,
+            "pedestrianId": track.get("pedestrianId"),
+            "direction": config["directionMapping"][mapping_key],
+            "offsetSeconds": event_offset,
+        }
+
+    visits: list[dict[str, Any]] = []
+    for offset_second, point in _interpolated_trajectory_points(track):
+        strip_name = _directional_zone_for_point(point, config)
+        if strip_name is None:
+            continue
+
+        offset_value = float(offset_second)
+        if visits and visits[-1]["zone"] == strip_name:
+            visits[-1]["lastOffsetSeconds"] = offset_value
+            continue
+
+        visits.append({"zone": strip_name, "offsetSeconds": offset_value, "lastOffsetSeconds": offset_value})
+
+    if len(visits) < 2:
+        return []
+
+    if len(visits) == 2:
+        partial_sequence_to_mapping = {
+            ("strip_0", "strip_1"): "path_0_1_2",
+            ("strip_1", "strip_2"): "path_0_1_2",
+            ("strip_2", "strip_1"): "path_2_1_0",
+            ("strip_1", "strip_0"): "path_2_1_0",
+        }
+        mapping_key = partial_sequence_to_mapping.get((visits[0]["zone"], visits[1]["zone"]))
+        if mapping_key is None:
+            return []
+        return [_build_directional_event(mapping_key, _transition_midpoint(visits[0], visits[1]))]
+
+    if len(visits) < 3:
+        return []
+
+    directional_events: list[dict[str, Any]] = []
+    sequence_to_mapping = {
+        ("strip_0", "strip_1", "strip_2"): "path_0_1_2",
+        ("strip_2", "strip_1", "strip_0"): "path_2_1_0",
+    }
+
+    visit_index = 0
+    while visit_index <= len(visits) - 3:
+        sequence = (visits[visit_index]["zone"], visits[visit_index + 1]["zone"], visits[visit_index + 2]["zone"])
+        mapping_key = sequence_to_mapping.get(sequence)
+        if mapping_key is None:
+            visit_index += 1
+            continue
+
+        event_offset = _visit_midpoint(visits[visit_index + 1])
+        if directional_events and event_offset - float(directional_events[-1]["offsetSeconds"]) < 2.0:
+            visit_index += 2
+            continue
+
+        directional_events.append(_build_directional_event(mapping_key, event_offset))
+        visit_index += 2
+
+    return directional_events
+
+
+def _video_directional_events(state: dict[str, Any], video: dict[str, Any]) -> list[dict[str, Any]]:
+    video_id = str(video.get("id") or "")
+    if not video_id:
+        return []
+
+    location = next((item for item in state.get("locations", []) if item.get("id") == video.get("locationId")), None)
+    if not isinstance(location, dict) or _normalized_entry_exit_points(location) is None:
+        return []
+
+    directional_events: list[dict[str, Any]] = []
+    for fallback_index, track in enumerate(state.get("pedestrianTracks", [])):
+        if track.get("videoId") != video_id:
+            continue
+
+        fallback_track_id = f"{video_id}-track-{fallback_index}"
+        directional_events.extend(_track_directional_events(track, location, fallback_track_id))
+
+    return sorted(
+        directional_events,
+        key=lambda event: (float(event.get("offsetSeconds") or 0.0), str(event.get("trackId") or ""), str(event.get("direction") or "")),
+    )
 
 
 def _point_in_location_roi(point: tuple[float, float], location: dict[str, Any]) -> bool:

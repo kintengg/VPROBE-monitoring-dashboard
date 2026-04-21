@@ -1,0 +1,92 @@
+[
+  {
+    "startOffsetSeconds": 0.0,
+    "endOffsetSeconds": 6.0,
+    "severity": "light",
+    "score": 31.06
+  },
+  {
+    "startOffsetSeconds": 6.0,
+    "endOffsetSeconds": 9.0,
+    "severity": "moderate",
+    "score": 34.61
+  },
+  {
+    "startOffsetSeconds": 9.0,
+    "endOffsetSeconds": 99.0,
+    "severity": "light",
+    "score": 32.24
+  },
+  {
+    "startOffsetSeconds": 99.0,
+    "endOffsetSeconds": 102.0,
+    "severity": "moderate",
+    "score": 39.49
+  },
+  {
+    "startOffsetSeconds": 102.0,
+    "endOffsetSeconds": 120.0,
+    "severity": "light",
+    "score": 28.69
+  },
+  {
+    "startOffsetSeconds": 120.0,
+    "endOffsetSeconds": 138.0,
+    "severity": "moderate",
+    "score": 44.08
+  },
+  {
+    "startOffsetSeconds": 138.0,
+    "endOffsetSeconds": 180.0,
+    "severity": "light",
+    "score": 32.24
+  },
+  {
+    "startOffsetSeconds": 180.0,
+    "endOffsetSeconds": 189.0,
+    "severity": "moderate",
+    "score": 45.27
+  },
+  {
+    "startOffsetSeconds": 189.0,
+    "endOffsetSeconds": 198.0,
+    "severity": "light",
+    "score": 32.24
+  },
+  {
+    "startOffsetSeconds": 198.0,
+    "endOffsetSeconds": 204.0,
+    "severity": "moderate",
+    "score": 54.12
+  },
+  {
+    "startOffsetSeconds": 204.0,
+    "endOffsetSeconds": 213.0,
+    "severity": "light",
+    "score": 28.69
+  },
+  {
+    "startOffsetSeconds": 213.0,
+    "endOffsetSeconds": 237.0,
+    "severity": "moderate",
+    "score": 58.12
+  },
+  {
+    "startOffsetSeconds": 237.0,
+    "endOffsetSeconds": 252.0,
+    "severity": "light",
+    "score": 28.69
+  },
+  {
+    "startOffsetSeconds": 252.0,
+    "endOffsetSeconds": 255.0,
+    "severity": "moderate",
+    "score": 33.43
+  },
+  {
+    "startOffsetSeconds": 255.0,
+    "endOffsetSeconds": 300.0,
+    "severity": "light",
+    "score": 28.69
+  }
+]

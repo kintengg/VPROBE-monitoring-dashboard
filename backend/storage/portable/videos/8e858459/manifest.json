@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-04-21T11:31:01Z",
+  "videoId": "8e858459",
+  "label": "Ateneo Gate 2.5 Overpass \u00b7 2025-01-23 \u00b7 10:23:20",
+  "directory": "storage/portable/videos/8e858459",
+  "artifacts": {
+    "metadataJson": "storage/portable/videos/8e858459/metadata.json",
+    "manifestJson": "storage/portable/videos/8e858459/manifest.json",
+    "eventsCsv": "storage/portable/videos/8e858459/events.csv",
+    "eventsJson": "storage/portable/videos/8e858459/events.json",
+    "tracksCsv": "storage/portable/videos/8e858459/tracks.csv",
+    "tracksJson": "storage/portable/videos/8e858459/tracks.json",
+    "trajectorySamplesCsv": "storage/portable/videos/8e858459/trajectory_samples.csv",
+    "trajectorySamplesJson": "storage/portable/videos/8e858459/trajectory_samples.json",
+    "timelineCsv": "storage/portable/videos/8e858459/timeline.csv",
+    "timelineJson": "storage/portable/videos/8e858459/timeline.json",
+    "wholeFootageLogCsv": "storage/portable/videos/8e858459/whole_footage_log.csv",
+    "wholeFootageLogJson": "storage/portable/videos/8e858459/whole_footage_log.json",
+    "severityBucketsCsv": "storage/portable/videos/8e858459/severity_buckets.csv",
+    "severityBucketsJson": "storage/portable/videos/8e858459/severity_buckets.json"
+  }
+}

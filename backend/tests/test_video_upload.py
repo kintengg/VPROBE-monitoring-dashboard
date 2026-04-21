@@ -187,6 +187,345 @@ def test_video_detail_includes_compact_timeline_severity_summary(monkeypatch, tm
     ]
 
 
+def test_video_detail_includes_directional_events_from_gate_strips(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    state = store.seed_state()
+    state["locations"] = [
+        {
+            "id": "gate-view",
+            "name": "Gate View",
+            "latitude": 14.63,
+            "longitude": 121.07,
+            "description": "",
+            "address": "",
+            "roiCoordinates": None,
+            "entryExitPoints": {
+                "referenceSize": [1920, 1080],
+                "gateDirectionZonesNorm": {
+                    "strip_0": [[0.1, 0.1], [0.3, 0.1], [0.3, 0.3], [0.1, 0.3]],
+                    "strip_1": [[0.4, 0.1], [0.6, 0.1], [0.6, 0.3], [0.4, 0.3]],
+                    "strip_2": [[0.7, 0.1], [0.9, 0.1], [0.9, 0.3], [0.7, 0.3]],
+                },
+                "directionMapping": {
+                    "path_0_1_2": "entering",
+                    "path_2_1_0": "exiting",
+                },
+            },
+            "walkableAreaM2": None,
+            "videos": [],
+        }
+    ]
+    state["videos"] = [
+        {
+            "id": "video-directional",
+            "locationId": "gate-view",
+            "location": "Gate View",
+            "timestamp": "08:00:00",
+            "date": "2026-03-20",
+            "startTime": "08:00:00",
+            "endTime": "08:00:08",
+            "gpsLat": 14.63,
+            "gpsLng": 121.07,
+            "pedestrianCount": 4,
+            "rawPath": None,
+            "processedPath": None,
+        }
+    ]
+    state["pedestrianTracks"] = [
+        {
+            "id": "track-enter",
+            "videoId": "video-directional",
+            "pedestrianId": 11,
+            "trajectorySamples": [[0, 0.2, 0.2, None], [1, 0.8, 0.2, None], [2, 0.8, 0.2, None]],
+        },
+        {
+            "id": "track-exit",
+            "videoId": "video-directional",
+            "pedestrianId": 12,
+            "trajectorySamples": [[3, 0.8, 0.2, None], [4, 0.2, 0.2, None]],
+        },
+        {
+            "id": "track-mid-only",
+            "videoId": "video-directional",
+            "pedestrianId": 13,
+            "trajectorySamples": [[1, 0.5, 0.2, None], [2, 0.5, 0.2, None]],
+        },
+        {
+            "id": "track-bounce",
+            "videoId": "video-directional",
+            "pedestrianId": 14,
+            "trajectorySamples": [[1, 0.2, 0.2, None], [2, 0.5, 0.2, None], [3, 0.2, 0.2, None]],
+        },
+    ]
+    store.save_state(state)
+
+    with TestClient(main.app) as client:
+        response = client.get("/api/videos/video-directional")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["directionalEvents"]) == 2
+    assert body["directionalEvents"][0]["trackId"] == "track-enter"
+    assert body["directionalEvents"][0]["pedestrianId"] == 11
+    assert body["directionalEvents"][0]["direction"] == "entering"
+    assert 0.0 < body["directionalEvents"][0]["offsetSeconds"] < 2.0
+    assert body["directionalEvents"][1]["trackId"] == "track-exit"
+    assert body["directionalEvents"][1]["pedestrianId"] == 12
+    assert body["directionalEvents"][1]["direction"] == "exiting"
+    assert 3.0 < body["directionalEvents"][1]["offsetSeconds"] < 4.5
+
+
+def test_video_detail_infers_directional_events_from_adjacent_two_strip_tracks(
+    monkeypatch, tmp_path: Path
+) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    state = store.seed_state()
+    state["locations"] = [
+        {
+            "id": "gate-view",
+            "name": "Gate View",
+            "latitude": 14.63,
+            "longitude": 121.07,
+            "description": "",
+            "address": "",
+            "roiCoordinates": None,
+            "entryExitPoints": {
+                "referenceSize": [1920, 1080],
+                "gateDirectionZonesNorm": {
+                    "strip_0": [[0.1, 0.1], [0.3, 0.1], [0.3, 0.3], [0.1, 0.3]],
+                    "strip_1": [[0.4, 0.1], [0.6, 0.1], [0.6, 0.3], [0.4, 0.3]],
+                    "strip_2": [[0.7, 0.1], [0.9, 0.1], [0.9, 0.3], [0.7, 0.3]],
+                },
+                "directionMapping": {
+                    "path_0_1_2": "entering",
+                    "path_2_1_0": "exiting",
+                },
+            },
+            "walkableAreaM2": None,
+            "videos": [],
+        }
+    ]
+    state["videos"] = [
+        {
+            "id": "video-directional",
+            "locationId": "gate-view",
+            "location": "Gate View",
+            "timestamp": "08:00:00",
+            "date": "2026-03-20",
+            "startTime": "08:00:00",
+            "endTime": "08:00:12",
+            "gpsLat": 14.63,
+            "gpsLng": 121.07,
+            "pedestrianCount": 6,
+            "rawPath": None,
+            "processedPath": None,
+        }
+    ]
+    state["pedestrianTracks"] = [
+        {
+            "id": "track-enter-edge-to-mid",
+            "videoId": "video-directional",
+            "pedestrianId": 21,
+            "trajectorySamples": [[0, 0.2, 0.2, None], [1, 0.5, 0.2, None]],
+        },
+        {
+            "id": "track-enter-mid-to-edge",
+            "videoId": "video-directional",
+            "pedestrianId": 22,
+            "trajectorySamples": [[3, 0.5, 0.2, None], [4, 0.8, 0.2, None]],
+        },
+        {
+            "id": "track-exit-edge-to-mid",
+            "videoId": "video-directional",
+            "pedestrianId": 23,
+            "trajectorySamples": [[6, 0.8, 0.2, None], [7, 0.5, 0.2, None]],
+        },
+        {
+            "id": "track-exit-mid-to-edge",
+            "videoId": "video-directional",
+            "pedestrianId": 24,
+            "trajectorySamples": [[9, 0.5, 0.2, None], [10, 0.2, 0.2, None]],
+        },
+        {
+            "id": "track-bounce",
+            "videoId": "video-directional",
+            "pedestrianId": 25,
+            "trajectorySamples": [[11, 0.2, 0.2, None], [12, 0.5, 0.2, None], [13, 0.2, 0.2, None]],
+        },
+    ]
+    store.save_state(state)
+
+    with TestClient(main.app) as client:
+        response = client.get("/api/videos/video-directional")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [event["trackId"] for event in body["directionalEvents"]] == [
+        "track-enter-edge-to-mid",
+        "track-enter-mid-to-edge",
+        "track-exit-edge-to-mid",
+        "track-exit-mid-to-edge",
+    ]
+    assert [event["direction"] for event in body["directionalEvents"]] == [
+        "entering",
+        "entering",
+        "exiting",
+        "exiting",
+    ]
+    assert 0.0 < body["directionalEvents"][0]["offsetSeconds"] < 1.0
+    assert 3.0 < body["directionalEvents"][1]["offsetSeconds"] < 4.0
+    assert 6.0 < body["directionalEvents"][2]["offsetSeconds"] < 7.0
+    assert 9.0 < body["directionalEvents"][3]["offsetSeconds"] < 10.0
+
+
+def test_video_detail_places_directional_event_time_near_gate_midpoint(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    state = store.seed_state()
+    state["locations"] = [
+        {
+            "id": "gate-view",
+            "name": "Gate View",
+            "latitude": 14.63,
+            "longitude": 121.07,
+            "description": "",
+            "address": "",
+            "roiCoordinates": None,
+            "entryExitPoints": {
+                "referenceSize": [1920, 1080],
+                "gateDirectionZonesNorm": {
+                    "strip_0": [[0.1, 0.1], [0.3, 0.1], [0.3, 0.3], [0.1, 0.3]],
+                    "strip_1": [[0.4, 0.1], [0.6, 0.1], [0.6, 0.3], [0.4, 0.3]],
+                    "strip_2": [[0.7, 0.1], [0.9, 0.1], [0.9, 0.3], [0.7, 0.3]],
+                },
+                "directionMapping": {
+                    "path_0_1_2": "entering",
+                    "path_2_1_0": "exiting",
+                },
+            },
+            "walkableAreaM2": None,
+            "videos": [],
+        }
+    ]
+    state["videos"] = [
+        {
+            "id": "video-directional",
+            "locationId": "gate-view",
+            "location": "Gate View",
+            "timestamp": "08:00:00",
+            "date": "2026-03-20",
+            "startTime": "08:00:00",
+            "endTime": "08:00:08",
+            "gpsLat": 14.63,
+            "gpsLng": 121.07,
+            "pedestrianCount": 2,
+            "rawPath": None,
+            "processedPath": None,
+        }
+    ]
+    state["pedestrianTracks"] = [
+        {
+            "id": "track-enter",
+            "videoId": "video-directional",
+            "pedestrianId": 31,
+            "trajectorySamples": [[0.0, 0.2, 0.2, None], [1.0, 0.5, 0.2, None], [2.0, 0.8, 0.2, None]],
+        },
+        {
+            "id": "track-exit",
+            "videoId": "video-directional",
+            "pedestrianId": 32,
+            "trajectorySamples": [[3.0, 0.8, 0.2, None], [4.0, 0.5, 0.2, None], [5.0, 0.2, 0.2, None]],
+        },
+    ]
+    store.save_state(state)
+
+    with TestClient(main.app) as client:
+        response = client.get("/api/videos/video-directional")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["directionalEvents"]) == 2
+    assert body["directionalEvents"][0]["direction"] == "entering"
+    assert body["directionalEvents"][0]["offsetSeconds"] == pytest.approx(1.0, abs=0.05)
+    assert body["directionalEvents"][1]["direction"] == "exiting"
+    assert body["directionalEvents"][1]["offsetSeconds"] == pytest.approx(4.0, abs=0.05)
+
+
+def test_normalized_trajectory_samples_preserve_fractional_offsets() -> None:
+    track = {
+        "id": "track-fractional",
+        "trajectorySamples": [[0.25, 0.2, 0.2, None], [1.75, 0.4, 0.4, None]],
+    }
+
+    assert store._normalized_trajectory_samples(track) == [
+        (0.25, (0.2, 0.2), None),
+        (1.75, (0.4, 0.4), None),
+    ]
+
+
+def test_load_state_backfills_edsa_entry_exit_points(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    state = store.seed_state()
+    for location in state["locations"]:
+        location.pop("entryExitPoints", None)
+    store.save_state(state)
+
+    hydrated_state = store.load_state()
+    edsa_location = next(location for location in hydrated_state["locations"] if location["id"] == "edsa-sec-walk")
+
+    assert edsa_location["entryExitPoints"] == store.DEFAULT_EDSA_SEC_WALK_ENTRY_EXIT_POINTS
+
+
+def test_load_state_normalizes_legacy_directional_gate_config(monkeypatch, tmp_path: Path) -> None:
+    configure_temp_storage(monkeypatch, tmp_path)
+
+    state = store.seed_state()
+    state["locations"] = [
+        {
+            "id": "gate-view",
+            "name": "Gate View",
+            "latitude": 14.63,
+            "longitude": 121.07,
+            "description": "",
+            "address": "",
+            "roiCoordinates": None,
+            "entryExitPoints": {
+                "referenceSize": [1920, 1080],
+                "gateDirectionZonesNorm": {
+                    "zone_far": [[0.1, 0.1], [0.3, 0.1], [0.3, 0.3], [0.1, 0.3]],
+                    "zone_mid": [[0.4, 0.1], [0.6, 0.1], [0.6, 0.3], [0.4, 0.3]],
+                    "zone_near": [[0.7, 0.1], [0.9, 0.1], [0.9, 0.3], [0.7, 0.3]],
+                },
+                "directionMapping": {
+                    "far_to_mid_to_near": "entering",
+                    "near_to_mid_to_far": "exiting",
+                },
+            },
+            "walkableAreaM2": None,
+            "videos": [],
+        }
+    ]
+    store.save_state(state)
+
+    hydrated_state = store.load_state()
+
+    assert hydrated_state["locations"][0]["entryExitPoints"] == {
+        "referenceSize": [1920, 1080],
+        "gateDirectionZonesNorm": {
+            "strip_0": [[0.1, 0.1], [0.3, 0.1], [0.3, 0.3], [0.1, 0.3]],
+            "strip_1": [[0.4, 0.1], [0.6, 0.1], [0.6, 0.3], [0.4, 0.3]],
+            "strip_2": [[0.7, 0.1], [0.9, 0.1], [0.9, 0.3], [0.7, 0.3]],
+        },
+        "directionMapping": {
+            "path_0_1_2": "entering",
+            "path_2_1_0": "exiting",
+        },
+    }
+
+
 def test_enrich_track_summaries_with_vision_appends_visual_metadata(monkeypatch, tmp_path: Path) -> None:
     configure_temp_storage(monkeypatch, tmp_path)
 

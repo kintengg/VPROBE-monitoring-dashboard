@@ -10,8 +10,20 @@ import { EventFeed } from "@/components/surveillance/event-feed"
 import { AISearchBar } from "@/components/surveillance/ai-search-bar"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { Activity, AlertCircle, ArrowLeft, Clock3, Download, Footprints, Loader2, Share2, Trash2, Users } from "lucide-react"
-import { deleteVideo, getEvents, getLocations, getMediaUrl, getVideo, getVideoPlaybackPath, type EventRecord, type LocationRecord, type VideoDetailRecord, type VideoPedestrianTrackRecord } from "@/lib/api"
+import { AlertCircle, ArrowLeft, Download, Footprints, Loader2, LogIn, LogOut, Share2, Trash2, Users } from "lucide-react"
+import {
+  deleteVideo,
+  getEvents,
+  getLocations,
+  getMediaUrl,
+  getVideo,
+  getVideoPlaybackPath,
+  hasValidEntryExitPointsConfiguration,
+  type EventRecord,
+  type LocationRecord,
+  type VideoDetailRecord,
+  type VideoPedestrianTrackRecord,
+} from "@/lib/api"
 
 function getDetectionStatus(event: EventRecord) {
   if (event.type === "alert") return "Requires Review"
@@ -38,6 +50,58 @@ function trackPlaybackWindows(tracks: VideoPedestrianTrackRecord[]) {
     .map((track) => createPlaybackWindow(track.firstOffsetSeconds, track.lastOffsetSeconds))
 }
 
+function parseClockSeconds(value?: string | null) {
+  if (!value) return null
+
+  const parts = value.split(":").map((part) => Number(part))
+  if (parts.length < 2 || parts.length > 3 || parts.some((part) => !Number.isFinite(part) || part < 0)) {
+    return null
+  }
+
+  const [hours, minutes, seconds = 0] = parts
+  return (hours * 3600) + (minutes * 60) + seconds
+}
+
+function scheduledDurationSeconds(startTime?: string | null, endTime?: string | null) {
+  const startSeconds = parseClockSeconds(startTime)
+  const endSeconds = parseClockSeconds(endTime)
+  if (startSeconds === null || endSeconds === null) {
+    return null
+  }
+
+  const normalizedEndSeconds = endSeconds >= startSeconds ? endSeconds : endSeconds + (24 * 3600)
+  const durationSeconds = normalizedEndSeconds - startSeconds
+  return durationSeconds > 0 ? durationSeconds : null
+}
+
+function sourceTimeFromPlaybackTime(playbackSeconds: number, playbackDurationSeconds: number, sourceDurationSeconds: number) {
+  const safePlaybackSeconds = Math.max(0, playbackSeconds)
+  if (!(playbackDurationSeconds > 0) || !(sourceDurationSeconds > 0)) {
+    return safePlaybackSeconds
+  }
+
+  if (Math.abs(playbackDurationSeconds - sourceDurationSeconds) < 0.01) {
+    return Math.min(safePlaybackSeconds, sourceDurationSeconds)
+  }
+
+  return Math.min(sourceDurationSeconds, safePlaybackSeconds * (sourceDurationSeconds / playbackDurationSeconds))
+}
+
+function playbackTimeFromSourceTime(sourceSeconds: number, playbackDurationSeconds: number, sourceDurationSeconds: number) {
+  const safeSourceSeconds = Math.max(0, sourceSeconds)
+  if (!(playbackDurationSeconds > 0) || !(sourceDurationSeconds > 0)) {
+    return safeSourceSeconds
+  }
+
+  if (Math.abs(playbackDurationSeconds - sourceDurationSeconds) < 0.01) {
+    return Math.min(safeSourceSeconds, playbackDurationSeconds)
+  }
+
+  return Math.min(playbackDurationSeconds, safeSourceSeconds * (playbackDurationSeconds / sourceDurationSeconds))
+}
+
+const LIVE_DETECTION_EPSILON_SECONDS = 0.25
+
 function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
@@ -50,10 +114,12 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | undefined>(undefined)
   const [requestedSeek, setRequestedSeek] = useState<{ seconds: number; token: number } | null>(null)
-  const [currentTimeSeconds, setCurrentTimeSeconds] = useState(0)
-  const [durationSeconds, setDurationSeconds] = useState(0)
+  const [requestedSeekSourceSeconds, setRequestedSeekSourceSeconds] = useState<number | null>(null)
+  const [playbackTimeSeconds, setPlaybackTimeSeconds] = useState(0)
+  const [playbackDurationSeconds, setPlaybackDurationSeconds] = useState(0)
   const [showAllDetections, setShowAllDetections] = useState(false)
   const [showROI, setShowROI] = useState(false)
+  const [showEntryExitPoints, setShowEntryExitPoints] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const videoElementRef = useRef<HTMLVideoElement | null>(null)
   const seekTokenRef = useRef(0)
@@ -99,9 +165,62 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   useEffect(() => {
     setShowAllDetections(false)
     setShowROI(false)
-    setCurrentTimeSeconds(0)
-    setDurationSeconds(0)
+    setShowEntryExitPoints(false)
+    setRequestedSeek(null)
+    setRequestedSeekSourceSeconds(null)
+    setPlaybackTimeSeconds(0)
+    setPlaybackDurationSeconds(0)
   }, [id])
+
+  const orderedEvents = useMemo(
+    () =>
+      [...events].sort((left, right) => {
+        const leftOffset = typeof left.offsetSeconds === "number" ? left.offsetSeconds : Number.POSITIVE_INFINITY
+        const rightOffset = typeof right.offsetSeconds === "number" ? right.offsetSeconds : Number.POSITIVE_INFINITY
+        return leftOffset - rightOffset
+      }),
+    [events],
+  )
+
+  const sourceDurationSeconds = useMemo(() => {
+    const candidates: number[] = []
+    const scheduledDuration = scheduledDurationSeconds(video?.startTime, video?.endTime)
+
+    if (scheduledDuration !== null) {
+      candidates.push(scheduledDuration)
+    }
+
+    for (const track of video?.pedestrianTracks ?? []) {
+      if (Number.isFinite(track.lastOffsetSeconds)) {
+        candidates.push(track.lastOffsetSeconds)
+      }
+    }
+
+    for (const directionalEvent of video?.directionalEvents ?? []) {
+      if (Number.isFinite(directionalEvent.offsetSeconds)) {
+        candidates.push(directionalEvent.offsetSeconds)
+      }
+    }
+
+    for (const event of orderedEvents) {
+      if (typeof event.offsetSeconds === "number" && Number.isFinite(event.offsetSeconds)) {
+        candidates.push(event.offsetSeconds)
+      }
+    }
+
+    for (const bucket of video?.severitySummary?.buckets ?? []) {
+      if (Number.isFinite(bucket.endOffsetSeconds)) {
+        candidates.push(bucket.endOffsetSeconds)
+      }
+    }
+
+    return candidates.length > 0 ? Math.max(...candidates) : playbackDurationSeconds
+  }, [orderedEvents, playbackDurationSeconds, video?.directionalEvents, video?.endTime, video?.pedestrianTracks, video?.severitySummary?.buckets, video?.startTime])
+
+  const currentTimeSeconds = useMemo(
+    () => sourceTimeFromPlaybackTime(playbackTimeSeconds, playbackDurationSeconds, sourceDurationSeconds),
+    [playbackDurationSeconds, playbackTimeSeconds, sourceDurationSeconds],
+  )
 
   useEffect(() => {
     const eventId = searchParams.get("eventId") ?? undefined
@@ -120,19 +239,24 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     }
 
     appliedQuerySeekRef.current = seekKey
-    seekTokenRef.current += 1
-    setRequestedSeek({ seconds, token: seekTokenRef.current })
-  }, [id, searchParams])
+    setRequestedSeekSourceSeconds(seconds)
+    setPlaybackTimeSeconds(playbackTimeFromSourceTime(seconds, playbackDurationSeconds, sourceDurationSeconds))
+  }, [id, playbackDurationSeconds, searchParams, sourceDurationSeconds])
 
-  const orderedEvents = useMemo(
-    () =>
-      [...events].sort((left, right) => {
-        const leftOffset = typeof left.offsetSeconds === "number" ? left.offsetSeconds : Number.POSITIVE_INFINITY
-        const rightOffset = typeof right.offsetSeconds === "number" ? right.offsetSeconds : Number.POSITIVE_INFINITY
-        return leftOffset - rightOffset
-      }),
-    [events],
-  )
+  useEffect(() => {
+    if (requestedSeekSourceSeconds === null) {
+      return
+    }
+
+    const playbackSeekSeconds = playbackTimeFromSourceTime(
+      requestedSeekSourceSeconds,
+      playbackDurationSeconds,
+      sourceDurationSeconds,
+    )
+
+    seekTokenRef.current += 1
+    setRequestedSeek({ seconds: playbackSeekSeconds, token: seekTokenRef.current })
+  }, [playbackDurationSeconds, requestedSeekSourceSeconds, sourceDurationSeconds])
 
   const searchMatchOffsets = useMemo(() => {
     const rawMatches = searchParams.get("matches")
@@ -197,7 +321,12 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const liveDetectedCount = useMemo(
     () =>
       pedestrianPlaybackWindows.reduce(
-        (count, window) => (currentTimeSeconds >= window.start && currentTimeSeconds <= window.end ? count + 1 : count),
+        (count, window) => (
+          currentTimeSeconds >= window.start
+          && currentTimeSeconds <= (window.end + LIVE_DETECTION_EPSILON_SECONDS)
+            ? count + 1
+            : count
+        ),
         0,
       ),
     [currentTimeSeconds, pedestrianPlaybackWindows],
@@ -206,6 +335,19 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const visibleDetectionDetails = showAllDetections ? detectionDetails : detectionDetails.slice(0, 15)
   const hasCollapsedDetections = detectionDetails.length > 15
   const hasLocationROI = Boolean(videoLocation?.roiCoordinates?.includePolygonsNorm?.length)
+  const hasEntryExitPoints = hasValidEntryExitPointsConfiguration(videoLocation?.entryExitPoints)
+  const directionalEvents = useMemo(
+    () => (hasEntryExitPoints ? [...(video?.directionalEvents ?? [])].sort((left, right) => left.offsetSeconds - right.offsetSeconds) : []),
+    [hasEntryExitPoints, video?.directionalEvents],
+  )
+  const enteringCount = useMemo(
+    () => directionalEvents.reduce((count, event) => (event.direction === "entering" && event.offsetSeconds <= currentTimeSeconds ? count + 1 : count), 0),
+    [currentTimeSeconds, directionalEvents],
+  )
+  const exitingCount = useMemo(
+    () => directionalEvents.reduce((count, event) => (event.direction === "exiting" && event.offsetSeconds <= currentTimeSeconds ? count + 1 : count), 0),
+    [currentTimeSeconds, directionalEvents],
+  )
 
   const mediaUrl = video ? getMediaUrl(getVideoPlaybackPath(video)) : null
   const metricTiles = [
@@ -226,17 +368,17 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
       cardClassName: "border-cyan-400/30 bg-gradient-to-br from-cyan-500/20 via-sky-500/10 to-transparent",
     },
     {
-      icon: Activity,
-      value: "--",
-      caption: "Metric 3",
+      icon: LogIn,
+      value: hasEntryExitPoints ? String(enteringCount) : "--",
+      caption: "Entering so far",
       iconClassName: "bg-violet-500/90 text-white ring-violet-500/20",
       valueClassName: "text-foreground",
       cardClassName: "border-violet-400/25 bg-gradient-to-br from-violet-500/12 via-fuchsia-500/8 to-transparent",
     },
     {
-      icon: Clock3,
-      value: "--",
-      caption: "Metric 4",
+      icon: LogOut,
+      value: hasEntryExitPoints ? String(exitingCount) : "--",
+      caption: "Exiting so far",
       iconClassName: "bg-amber-500/90 text-white ring-amber-500/20",
       valueClassName: "text-foreground",
       cardClassName: "border-amber-400/25 bg-gradient-to-br from-amber-500/12 via-orange-500/8 to-transparent",
@@ -244,9 +386,9 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   ]
 
   const requestSeek = (seconds: number) => {
-    setCurrentTimeSeconds(Math.max(0, seconds))
-    seekTokenRef.current += 1
-    setRequestedSeek({ seconds, token: seekTokenRef.current })
+    const safeSeconds = Math.max(0, seconds)
+    setRequestedSeekSourceSeconds(safeSeconds)
+    setPlaybackTimeSeconds(playbackTimeFromSourceTime(safeSeconds, playbackDurationSeconds, sourceDurationSeconds))
   }
 
   const handleEventSelect = (event: EventRecord) => {
@@ -384,19 +526,6 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
               </div>
             )}
 
-            {hasLocationROI && (
-              <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 shadow-elevated-sm">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Show ROI Outline</p>
-                  <p className="text-xs text-muted-foreground">Display the stored walkable ROI polygons over the video for alignment debugging.</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-medium text-muted-foreground">{showROI ? "ON" : "OFF"}</span>
-                  <Switch checked={showROI} onCheckedChange={setShowROI} aria-label="Show ROI Outline" />
-                </div>
-              </div>
-            )}
-
             {/* Video Player with Bounding Boxes */}
             <VideoPlayer
               videoId={video.id}
@@ -410,8 +539,10 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
               requestedSeek={requestedSeek}
               roiCoordinates={videoLocation?.roiCoordinates ?? null}
               showROI={showROI}
-              onTimeUpdate={setCurrentTimeSeconds}
-              onDurationChange={setDurationSeconds}
+              entryExitPoints={hasEntryExitPoints ? (videoLocation?.entryExitPoints ?? null) : null}
+              showEntryExitPoints={showEntryExitPoints}
+              onTimeUpdate={setPlaybackTimeSeconds}
+              onDurationChange={setPlaybackDurationSeconds}
             />
 
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -438,7 +569,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
             <PlaybackTimeline
               startTime={video.startTime}
               endTime={video.endTime}
-              durationSeconds={durationSeconds}
+              durationSeconds={sourceDurationSeconds}
               currentTimeSeconds={currentTimeSeconds}
               events={orderedEvents}
               severityBuckets={video.severitySummary?.buckets ?? []}
@@ -456,6 +587,35 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
               trackedPedestriansSoFar={trackedPedestriansSoFar}
               pedestrianCount={video.pedestrianCount}
             />
+
+            {(hasLocationROI || hasEntryExitPoints) && (
+              <div className="space-y-3">
+                {hasLocationROI && (
+                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 shadow-elevated-sm">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Show ROI Outline</p>
+                      <p className="text-xs text-muted-foreground">Display the stored walkable ROI polygons over the video for alignment debugging.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-medium text-muted-foreground">{showROI ? "ON" : "OFF"}</span>
+                      <Switch checked={showROI} onCheckedChange={setShowROI} aria-label="Show ROI Outline" />
+                    </div>
+                  </div>
+                )}
+                {hasEntryExitPoints && (
+                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 shadow-elevated-sm">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Show ROI Outline (Entry/Exit Points)</p>
+                      <p className="text-xs text-muted-foreground">Display the stored directional gate strips over the video for alignment and counting debugging.</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-medium text-muted-foreground">{showEntryExitPoints ? "ON" : "OFF"}</span>
+                      <Switch checked={showEntryExitPoints} onCheckedChange={setShowEntryExitPoints} aria-label="Show ROI Outline (Entry/Exit Points)" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -23,6 +23,7 @@ class LocationCreate(BaseModel):
     description: str = ""
     address: str = ""
     roiCoordinates: Optional[dict[str, Any]] = None
+    entryExitPoints: Optional[dict[str, Any]] = None
     walkableAreaM2: Optional[float] = None
 
 
@@ -75,9 +76,17 @@ class VideoPedestrianTrack(BaseModel):
     lastOffsetSeconds: float
 
 
+class VideoDirectionalEvent(BaseModel):
+    trackId: str
+    pedestrianId: Optional[int] = None
+    direction: Literal["entering", "exiting"]
+    offsetSeconds: float
+
+
 class VideoDetailRecord(VideoRecord):
     severitySummary: Optional[VideoSeveritySummary] = None
     pedestrianTracks: list[VideoPedestrianTrack] = Field(default_factory=list)
+    directionalEvents: list[VideoDirectionalEvent] = Field(default_factory=list)
 
 
 class EventRecord(BaseModel):

@@ -1,0 +1,10 @@
+startOffsetSeconds,endOffsetSeconds,severity,score
+0.0,7.5,moderate,54.1
+7.5,17.5,light,29.12
+17.5,22.5,moderate,36.44
+22.5,27.5,light,27.9
+27.5,30.0,moderate,39.7
+30.0,32.5,light,25.33
+32.5,35.0,neutral,
+35.0,45.0,light,30.15
+45.0,60.0,moderate,58.5

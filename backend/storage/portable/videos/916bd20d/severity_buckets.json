@@ -1,0 +1,56 @@
+[
+  {
+    "startOffsetSeconds": 0.0,
+    "endOffsetSeconds": 7.5,
+    "severity": "moderate",
+    "score": 54.1
+  },
+  {
+    "startOffsetSeconds": 7.5,
+    "endOffsetSeconds": 17.5,
+    "severity": "light",
+    "score": 29.12
+  },
+  {
+    "startOffsetSeconds": 17.5,
+    "endOffsetSeconds": 22.5,
+    "severity": "moderate",
+    "score": 36.44
+  },
+  {
+    "startOffsetSeconds": 22.5,
+    "endOffsetSeconds": 27.5,
+    "severity": "light",
+    "score": 27.9
+  },
+  {
+    "startOffsetSeconds": 27.5,
+    "endOffsetSeconds": 30.0,
+    "severity": "moderate",
+    "score": 39.7
+  },
+  {
+    "startOffsetSeconds": 30.0,
+    "endOffsetSeconds": 32.5,
+    "severity": "light",
+    "score": 25.33
+  },
+  {
+    "startOffsetSeconds": 32.5,
+    "endOffsetSeconds": 35.0,
+    "severity": "neutral",
+    "score": null
+  },
+  {
+    "startOffsetSeconds": 35.0,
+    "endOffsetSeconds": 45.0,
+    "severity": "light",
+    "score": 30.15
+  },
+  {
+    "startOffsetSeconds": 45.0,
+    "endOffsetSeconds": 60.0,
+    "severity": "moderate",
+    "score": 58.5
+  }
+]

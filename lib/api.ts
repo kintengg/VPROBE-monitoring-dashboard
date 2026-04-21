@@ -18,6 +18,156 @@ export interface ROIConfiguration {
   includePolygonsNorm: NormalizedPoint[][]
 }
 
+export type DirectionalCountLabel = "entering" | "exiting"
+
+export type DirectionalStripKey = "strip_0" | "strip_1" | "strip_2"
+
+export interface GateDirectionConfiguration {
+  referenceSize: [number, number]
+  gateDirectionZonesNorm: {
+    strip_0: NormalizedPoint[]
+    strip_1: NormalizedPoint[]
+    strip_2: NormalizedPoint[]
+  }
+  directionMapping: {
+    path_0_1_2: DirectionalCountLabel
+    path_2_1_0: DirectionalCountLabel
+  }
+}
+
+export interface VideoDirectionalEventRecord {
+  trackId: string
+  pedestrianId?: number | null
+  direction: DirectionalCountLabel
+  offsetSeconds: number
+}
+
+function isPositiveNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+}
+
+function parseDirectionalPoint(point: unknown): NormalizedPoint {
+  if (!Array.isArray(point) || point.length !== 2) {
+    throw new Error("Each point must be [x, y].")
+  }
+
+  const [x, y] = point
+  if (
+    typeof x !== "number"
+    || typeof y !== "number"
+    || !Number.isFinite(x)
+    || !Number.isFinite(y)
+    || x < 0
+    || x > 1
+    || y < 0
+    || y > 1
+  ) {
+    throw new Error("Coordinates must be normalized between 0 and 1.")
+  }
+
+  return [x, y]
+}
+
+function parseDirectionalStrip(strip: unknown, stripName: DirectionalStripKey): NormalizedPoint[] {
+  if (strip == null) {
+    throw new Error(`${stripName} is required.`)
+  }
+
+  if (!Array.isArray(strip) || strip.length < 3) {
+    throw new Error("Each strip must contain at least 3 points.")
+  }
+
+  return strip.map((point) => parseDirectionalPoint(point))
+}
+
+export function validateEntryExitPointsConfiguration(value: unknown): GateDirectionConfiguration {
+  if (!value || typeof value !== "object") {
+    throw new Error("Entry/Exit Points JSON must be valid JSON.")
+  }
+
+  const record = value as Record<string, unknown>
+  const referenceSize = record.referenceSize
+  if (
+    !Array.isArray(referenceSize)
+    || referenceSize.length !== 2
+    || !isPositiveNumber(referenceSize[0])
+    || !isPositiveNumber(referenceSize[1])
+  ) {
+    throw new Error("referenceSize must be [width, height].")
+  }
+
+  const gateDirectionZonesNorm = record.gateDirectionZonesNorm
+  if (!gateDirectionZonesNorm || typeof gateDirectionZonesNorm !== "object") {
+    throw new Error("gateDirectionZonesNorm must contain strip_0, strip_1, and strip_2.")
+  }
+
+  const zonesRecord = gateDirectionZonesNorm as Record<string, unknown>
+  const strip_0 = parseDirectionalStrip(zonesRecord.strip_0, "strip_0")
+  const strip_1 = parseDirectionalStrip(zonesRecord.strip_1, "strip_1")
+  const strip_2 = parseDirectionalStrip(zonesRecord.strip_2, "strip_2")
+
+  const directionMapping = record.directionMapping
+  if (!directionMapping || typeof directionMapping !== "object") {
+    throw new Error("directionMapping must define path_0_1_2 and path_2_1_0.")
+  }
+
+  const mappingRecord = directionMapping as Record<string, unknown>
+  const path012 = mappingRecord.path_0_1_2
+  const path210 = mappingRecord.path_2_1_0
+  if (path012 == null || path210 == null) {
+    throw new Error("directionMapping must define path_0_1_2 and path_2_1_0.")
+  }
+
+  if (
+    (path012 !== "entering" && path012 !== "exiting")
+    || (path210 !== "entering" && path210 !== "exiting")
+  ) {
+    throw new Error("directionMapping values must be either entering or exiting.")
+  }
+
+  if (path012 === path210) {
+    throw new Error("directionMapping values must map one path to entering and the other to exiting.")
+  }
+
+  return {
+    referenceSize: [referenceSize[0], referenceSize[1]],
+    gateDirectionZonesNorm: {
+      strip_0,
+      strip_1,
+      strip_2,
+    },
+    directionMapping: {
+      path_0_1_2: path012,
+      path_2_1_0: path210,
+    },
+  }
+}
+
+export function parseEntryExitPointsConfiguration(value: string): GateDirectionConfiguration | null {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    throw new Error("Entry/Exit Points JSON must be valid JSON.")
+  }
+
+  return validateEntryExitPointsConfiguration(parsed)
+}
+
+export function hasValidEntryExitPointsConfiguration(value: unknown): value is GateDirectionConfiguration {
+  try {
+    validateEntryExitPointsConfiguration(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export interface LocationRecord {
   id: string
   name: string
@@ -26,6 +176,7 @@ export interface LocationRecord {
   description: string
   address: string
   roiCoordinates?: ROIConfiguration | null
+  entryExitPoints?: GateDirectionConfiguration | null
   walkableAreaM2?: number | null
   videos: VideoCard[]
 }
@@ -66,6 +217,7 @@ export interface VideoPedestrianTrackRecord {
 
 export interface VideoDetailRecord extends VideoRecord {
   pedestrianTracks: VideoPedestrianTrackRecord[]
+  directionalEvents: VideoDirectionalEventRecord[]
 }
 
 export type VideoSeverityLevel = "neutral" | "light" | "moderate" | "heavy"

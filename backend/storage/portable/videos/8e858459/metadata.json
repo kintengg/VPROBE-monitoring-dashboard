@@ -1,0 +1,181 @@
+{
+  "generatedAt": "2026-04-21T11:31:01Z",
+  "video": {
+    "id": "8e858459",
+    "locationId": "ateneo-gate-2-5-overpass",
+    "location": "Ateneo Gate 2.5 Overpass",
+    "timestamp": "10:23:20",
+    "date": "2025-01-23",
+    "startTime": "10:23:20",
+    "endTime": "10:24:20",
+    "gpsLat": 14.6368619,
+    "gpsLng": 121.0744364,
+    "pedestrianCount": 43,
+    "rawPath": "storage/videos/raw/6c8de2b4-Gate-2.5_minute_38_clip.mp4",
+    "processedPath": "storage/videos/processed/8e858459/6c8de2b4-Gate-2.5_minute_38_clip.mp4"
+  },
+  "location": {
+    "id": "ateneo-gate-2-5-overpass",
+    "name": "Ateneo Gate 2.5 Overpass",
+    "latitude": 14.6368619,
+    "longitude": 121.0744364,
+    "description": "food",
+    "address": "Ateneo Gate 2.5 Overpass, Loyola Heights, Quezon City, Metro Manila",
+    "roiCoordinates": {
+      "referenceSize": [
+        3002,
+        1696
+      ],
+      "includePolygonsNorm": [
+        [
+          [
+            0.548251,
+            0.312394
+          ],
+          [
+            0.349294,
+            0.658408
+          ],
+          [
+            0.506549,
+            0.633803
+          ],
+          [
+            0.646429,
+            0.332388
+          ]
+        ],
+        [
+          [
+            0.349294,
+            0.656869
+          ],
+          [
+            0.460503,
+            0.829104
+          ],
+          [
+            0.748078,
+            0.781433
+          ],
+          [
+            0.781962,
+            0.543066
+          ]
+        ]
+      ]
+    },
+    "entryExitPoints": {
+      "referenceSize": [
+        3002,
+        1696
+      ],
+      "gateDirectionZonesNorm": {
+        "strip_0": [
+          [
+            0.352765,
+            0.660849
+          ],
+          [
+            0.509117,
+            0.641333
+          ],
+          [
+            0.513198,
+            0.653007
+          ],
+          [
+            0.347702,
+            0.673526
+          ]
+        ],
+        "strip_1": [
+          [
+            0.373151,
+            0.605071
+          ],
+          [
+            0.512425,
+            0.619458
+          ],
+          [
+            0.511193,
+            0.627771
+          ],
+          [
+            0.370087,
+            0.614623
+          ]
+        ],
+        "strip_2": [
+          [
+            0.517888,
+            0.61138
+          ],
+          [
+            0.39013,
+            0.56921
+          ],
+          [
+            0.401432,
+            0.549233
+          ],
+          [
+            0.522385,
+            0.595401
+          ]
+        ]
+      },
+      "directionMapping": {
+        "path_0_1_2": "exiting",
+        "path_2_1_0": "entering"
+      }
+    },
+    "walkableAreaM2": null
+  },
+  "counts": {
+    "pedestrianCount": 43,
+    "eventCount": 43,
+    "trackCount": 43,
+    "trajectorySampleCount": 171,
+    "timelineRowCount": 60,
+    "wholeFootageLogRowCount": 77,
+    "severityBucketCount": 5
+  },
+  "severitySummary": {
+    "bucketCount": 24,
+    "sampledSeconds": 50,
+    "buckets": [
+      {
+        "startOffsetSeconds": 0.0,
+        "endOffsetSeconds": 5.0,
+        "severity": "light",
+        "score": 15.31
+      },
+      {
+        "startOffsetSeconds": 5.0,
+        "endOffsetSeconds": 12.5,
+        "severity": "moderate",
+        "score": 40.6
+      },
+      {
+        "startOffsetSeconds": 12.5,
+        "endOffsetSeconds": 45.0,
+        "severity": "light",
+        "score": 27.87
+      },
+      {
+        "startOffsetSeconds": 45.0,
+        "endOffsetSeconds": 52.5,
+        "severity": "neutral",
+        "score": null
+      },
+      {
+        "startOffsetSeconds": 52.5,
+        "endOffsetSeconds": 60.0,
+        "severity": "light",
+        "score": 27.56
+      }
+    ]
+  }
+}

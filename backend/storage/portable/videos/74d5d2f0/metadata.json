@@ -1,0 +1,343 @@
+{
+  "generatedAt": "2026-04-21T19:03:01Z",
+  "video": {
+    "id": "74d5d2f0",
+    "locationId": "edsa-sec-walk",
+    "location": "EDSA Sec Walk",
+    "timestamp": "10:45:00",
+    "date": "2025-10-07",
+    "startTime": "10:45:00",
+    "endTime": "11:14:59",
+    "gpsLat": 14.6399653,
+    "gpsLng": 121.0785141,
+    "pedestrianCount": 3807,
+    "rawPath": "storage/videos/raw/7b22e4df-kostka-edsawalk_145_30m.mp4",
+    "processedPath": "storage/videos/processed/74d5d2f0/7b22e4df-kostka-edsawalk_145_30m.mp4"
+  },
+  "location": {
+    "id": "edsa-sec-walk",
+    "name": "EDSA Sec Walk",
+    "latitude": 14.6399653,
+    "longitude": 121.0785141,
+    "description": "Approximate Xavier Hall camera anchor along the EDSA security walkway.",
+    "address": "J3QH+XCJ, University Rd, Quezon City, 1800 Metro Manila",
+    "roiCoordinates": {
+      "referenceSize": [
+        1920,
+        1080
+      ],
+      "includePolygonsNorm": [
+        [
+          [
+            0.24587,
+            0.988037
+          ],
+          [
+            0.995651,
+            0.997306
+          ],
+          [
+            0.219792,
+            0.098426
+          ],
+          [
+            0.196354,
+            0.101481
+          ]
+        ],
+        [
+          [
+            0.432646,
+            0.337861
+          ],
+          [
+            0.564266,
+            0.309009
+          ],
+          [
+            0.544432,
+            0.472491
+          ],
+          [
+            0.487635,
+            0.403574
+          ]
+        ],
+        [
+          [
+            0.221693,
+            0.09425
+          ],
+          [
+            0.346099,
+            0.244907
+          ],
+          [
+            0.344297,
+            0.187213
+          ]
+        ]
+      ]
+    },
+    "entryExitPoints": {
+      "referenceSize": [
+        1920,
+        1080
+      ],
+      "gateDirectionZonesNorm": {
+        "strip_0": [
+          [
+            0.741958,
+            0.623528
+          ],
+          [
+            0.222411,
+            0.813509
+          ],
+          [
+            0.217198,
+            0.767167
+          ],
+          [
+            0.716766,
+            0.594185
+          ]
+        ],
+        "strip_1": [
+          [
+            0.785417,
+            0.682222
+          ],
+          [
+            0.231094,
+            0.915463
+          ],
+          [
+            0.227604,
+            0.884537
+          ],
+          [
+            0.768021,
+            0.668333
+          ]
+        ],
+        "strip_2": [
+          [
+            0.860104,
+            0.768704
+          ],
+          [
+            0.253589,
+            1
+          ],
+          [
+            0.242292,
+            0.99963
+          ],
+          [
+            0.239786,
+            0.96487
+          ],
+          [
+            0.842708,
+            0.74713
+          ]
+        ]
+      },
+      "directionMapping": {
+        "path_0_1_2": "exiting",
+        "path_2_1_0": "entering"
+      }
+    },
+    "walkableAreaM2": null
+  },
+  "counts": {
+    "pedestrianCount": 3807,
+    "eventCount": 50,
+    "trackCount": 3807,
+    "trajectorySampleCount": 18495,
+    "timelineRowCount": 1799,
+    "wholeFootageLogRowCount": 15080,
+    "severityBucketCount": 29
+  },
+  "severitySummary": {
+    "bucketCount": 120,
+    "sampledSeconds": 1712,
+    "buckets": [
+      {
+        "startOffsetSeconds": 0.0,
+        "endOffsetSeconds": 14.992,
+        "severity": "moderate",
+        "score": 48.31
+      },
+      {
+        "startOffsetSeconds": 14.992,
+        "endOffsetSeconds": 29.983,
+        "severity": "heavy",
+        "score": 74.24
+      },
+      {
+        "startOffsetSeconds": 29.983,
+        "endOffsetSeconds": 44.975,
+        "severity": "moderate",
+        "score": 52.75
+      },
+      {
+        "startOffsetSeconds": 44.975,
+        "endOffsetSeconds": 59.967,
+        "severity": "heavy",
+        "score": 68.44
+      },
+      {
+        "startOffsetSeconds": 59.967,
+        "endOffsetSeconds": 194.892,
+        "severity": "moderate",
+        "score": 64.81
+      },
+      {
+        "startOffsetSeconds": 194.892,
+        "endOffsetSeconds": 869.517,
+        "severity": "heavy",
+        "score": 95.77
+      },
+      {
+        "startOffsetSeconds": 869.517,
+        "endOffsetSeconds": 884.508,
+        "severity": "moderate",
+        "score": 60.97
+      },
+      {
+        "startOffsetSeconds": 884.508,
+        "endOffsetSeconds": 1034.425,
+        "severity": "heavy",
+        "score": 94.57
+      },
+      {
+        "startOffsetSeconds": 1034.425,
+        "endOffsetSeconds": 1064.408,
+        "severity": "moderate",
+        "score": 62.67
+      },
+      {
+        "startOffsetSeconds": 1064.408,
+        "endOffsetSeconds": 1079.4,
+        "severity": "light",
+        "score": 28.69
+      },
+      {
+        "startOffsetSeconds": 1079.4,
+        "endOffsetSeconds": 1109.383,
+        "severity": "moderate",
+        "score": 60.67
+      },
+      {
+        "startOffsetSeconds": 1109.383,
+        "endOffsetSeconds": 1124.375,
+        "severity": "heavy",
+        "score": 67.76
+      },
+      {
+        "startOffsetSeconds": 1124.375,
+        "endOffsetSeconds": 1169.35,
+        "severity": "moderate",
+        "score": 53.37
+      },
+      {
+        "startOffsetSeconds": 1169.35,
+        "endOffsetSeconds": 1184.342,
+        "severity": "heavy",
+        "score": 71.68
+      },
+      {
+        "startOffsetSeconds": 1184.342,
+        "endOffsetSeconds": 1199.333,
+        "severity": "moderate",
+        "score": 65.81
+      },
+      {
+        "startOffsetSeconds": 1199.333,
+        "endOffsetSeconds": 1229.317,
+        "severity": "light",
+        "score": 28.69
+      },
+      {
+        "startOffsetSeconds": 1229.317,
+        "endOffsetSeconds": 1274.292,
+        "severity": "moderate",
+        "score": 47.16
+      },
+      {
+        "startOffsetSeconds": 1274.292,
+        "endOffsetSeconds": 1334.258,
+        "severity": "light",
+        "score": 32.24
+      },
+      {
+        "startOffsetSeconds": 1334.258,
+        "endOffsetSeconds": 1364.242,
+        "severity": "moderate",
+        "score": 47.16
+      },
+      {
+        "startOffsetSeconds": 1364.242,
+        "endOffsetSeconds": 1394.225,
+        "severity": "heavy",
+        "score": 79.26
+      },
+      {
+        "startOffsetSeconds": 1394.225,
+        "endOffsetSeconds": 1409.217,
+        "severity": "moderate",
+        "score": 34.61
+      },
+      {
+        "startOffsetSeconds": 1409.217,
+        "endOffsetSeconds": 1529.15,
+        "severity": "light",
+        "score": 30.47
+      },
+      {
+        "startOffsetSeconds": 1529.15,
+        "endOffsetSeconds": 1574.125,
+        "severity": "moderate",
+        "score": 46.45
+      },
+      {
+        "startOffsetSeconds": 1574.125,
+        "endOffsetSeconds": 1649.083,
+        "severity": "light",
+        "score": 32.24
+      },
+      {
+        "startOffsetSeconds": 1649.083,
+        "endOffsetSeconds": 1694.058,
+        "severity": "moderate",
+        "score": 41.86
+      },
+      {
+        "startOffsetSeconds": 1694.058,
+        "endOffsetSeconds": 1739.033,
+        "severity": "light",
+        "score": 27.5
+      },
+      {
+        "startOffsetSeconds": 1739.033,
+        "endOffsetSeconds": 1769.017,
+        "severity": "neutral",
+        "score": null
+      },
+      {
+        "startOffsetSeconds": 1769.017,
+        "endOffsetSeconds": 1784.008,
+        "severity": "light",
+        "score": 10.92
+      },
+      {
+        "startOffsetSeconds": 1784.008,
+        "endOffsetSeconds": 1799.0,
+        "severity": "neutral",
+        "score": null
+      }
+    ]
+  }
+}

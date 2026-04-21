@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { AlertCircle, MapPin, Users } from "lucide-react"
-import type { ROIConfiguration } from "@/lib/api"
+import type { GateDirectionConfiguration, ROIConfiguration } from "@/lib/api"
 
 interface VideoPlayerProps {
   videoId: string
@@ -16,14 +16,42 @@ interface VideoPlayerProps {
   requestedSeek?: { seconds: number; token: number } | null
   roiCoordinates?: ROIConfiguration | null
   showROI?: boolean
+  entryExitPoints?: GateDirectionConfiguration | null
+  showEntryExitPoints?: boolean
   onTimeUpdate?: (seconds: number) => void
   onDurationChange?: (seconds: number) => void
 }
+
+const DIRECTIONAL_STRIP_STYLES = [
+  { key: "strip_0", label: "strip_0", stroke: "#22d3ee" },
+  { key: "strip_1", label: "strip_1", stroke: "#fde047" },
+  { key: "strip_2", label: "strip_2", stroke: "#ff4dff" },
+] as const
 
 function applySeek(video: HTMLVideoElement, seconds: number) {
   const nextTime = Number.isFinite(video.duration) ? Math.min(Math.max(seconds, 0), video.duration) : Math.max(seconds, 0)
   video.currentTime = nextTime
   return nextTime
+}
+
+function toOverlayPointString(polygon: Array<[number, number]>, width: number, height: number) {
+  return polygon.map(([x, y]) => `${x * width},${y * height}`).join(" ")
+}
+
+function polygonCentroid(polygon: Array<[number, number]>, width: number, height: number) {
+  if (polygon.length === 0) {
+    return { x: 0, y: 0 }
+  }
+
+  const total = polygon.reduce(
+    (accumulator, [x, y]) => ({ x: accumulator.x + (x * width), y: accumulator.y + (y * height) }),
+    { x: 0, y: 0 },
+  )
+
+  return {
+    x: total.x / polygon.length,
+    y: total.y / polygon.length,
+  }
 }
 
 export function VideoPlayer({
@@ -38,12 +66,39 @@ export function VideoPlayer({
   requestedSeek,
   roiCoordinates,
   showROI = false,
+  entryExitPoints,
+  showEntryExitPoints = false,
   onTimeUpdate,
   onDurationChange,
 }: VideoPlayerProps) {
   const fallbackRef = useRef<HTMLVideoElement | null>(null)
+  const frameRef = useRef<HTMLDivElement | null>(null)
   const resolvedRef = videoRef ?? fallbackRef
+  const [overlaySize, setOverlaySize] = useState({ width: 0, height: 0 })
   const roiPolygons = roiCoordinates?.includePolygonsNorm ?? []
+  const directionalZones = entryExitPoints?.gateDirectionZonesNorm ?? null
+
+  useEffect(() => {
+    const element = frameRef.current
+    if (!element || typeof ResizeObserver === "undefined") {
+      return
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) {
+        return
+      }
+
+      setOverlaySize({
+        width: entry.contentRect.width,
+        height: entry.contentRect.height,
+      })
+    })
+
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     if (!src) {
@@ -126,6 +181,28 @@ export function VideoPlayer({
     }
   }, [onDurationChange, onTimeUpdate, resolvedRef, src])
 
+  const overlayWidth = overlaySize.width > 0 ? overlaySize.width : 1
+  const overlayHeight = overlaySize.height > 0 ? overlaySize.height : 1
+  const showAnyOverlay = (showROI && roiPolygons.length > 0) || (showEntryExitPoints && directionalZones != null)
+  const directionalZoneOverlays = useMemo(() => {
+    if (!directionalZones) {
+      return []
+    }
+
+    return DIRECTIONAL_STRIP_STYLES.map(({ key, label, stroke }) => {
+      const polygon = directionalZones[key]
+      return {
+        key,
+        label,
+        stroke,
+        points: toOverlayPointString(polygon, overlayWidth, overlayHeight),
+        centroid: polygonCentroid(polygon, overlayWidth, overlayHeight),
+      }
+    })
+  }, [directionalZones, overlayHeight, overlayWidth])
+  const overlayStrokeWidth = Math.max(2, Math.min(overlayWidth, overlayHeight) * 0.004)
+  const labelFontSize = Math.max(10, Math.min(13, Math.min(overlayWidth, overlayHeight) * 0.018))
+
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-elevated-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
@@ -142,7 +219,7 @@ export function VideoPlayer({
 
       {src ? (
         <div className="bg-black">
-          <div className="relative aspect-video w-full bg-black">
+          <div ref={frameRef} className="relative aspect-video w-full bg-black">
             <video
               key={src}
               ref={resolvedRef}
@@ -152,24 +229,51 @@ export function VideoPlayer({
               preload="metadata"
               className="aspect-video w-full bg-black"
             />
-            {showROI && roiPolygons.length > 0 && (
+            {showAnyOverlay && (
               <svg
                 aria-hidden="true"
-                viewBox="0 0 1 1"
+                viewBox={`0 0 ${overlayWidth} ${overlayHeight}`}
                 preserveAspectRatio="none"
                 className="pointer-events-none absolute inset-0 z-10 h-full w-full"
               >
-                {roiPolygons.map((polygon, index) => (
+                {showROI && roiPolygons.map((polygon, index) => (
                   <polygon
                     key={`roi-${index}`}
-                    points={polygon.map(([x, y]) => `${x},${y}`).join(" ")}
+                    points={toOverlayPointString(polygon, overlayWidth, overlayHeight)}
                     fill="none"
                     stroke="#39FF14"
-                    strokeWidth={0.004}
+                    strokeWidth={overlayStrokeWidth}
                     strokeLinejoin="round"
                     strokeLinecap="round"
                     style={{ filter: "drop-shadow(0 0 6px rgba(57, 255, 20, 0.9))" }}
                   />
+                ))}
+                {showEntryExitPoints && directionalZoneOverlays.map((zone) => (
+                  <g key={zone.key}>
+                    <polygon
+                      points={zone.points}
+                      fill="none"
+                      stroke={zone.stroke}
+                      strokeWidth={overlayStrokeWidth}
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                      style={{ filter: `drop-shadow(0 0 6px ${zone.stroke}99)` }}
+                    />
+                    <text
+                      x={zone.centroid.x}
+                      y={zone.centroid.y}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={labelFontSize}
+                      fontWeight={700}
+                      fill={zone.stroke}
+                      stroke="rgba(0,0,0,0.9)"
+                      strokeWidth={labelFontSize * 0.18}
+                      paintOrder="stroke"
+                    >
+                      {zone.label}
+                    </text>
+                  </g>
                 ))}
               </svg>
             )}

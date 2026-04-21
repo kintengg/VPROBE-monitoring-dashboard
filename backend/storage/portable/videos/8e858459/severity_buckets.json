@@ -1,0 +1,32 @@
+[
+  {
+    "startOffsetSeconds": 0.0,
+    "endOffsetSeconds": 5.0,
+    "severity": "light",
+    "score": 15.31
+  },
+  {
+    "startOffsetSeconds": 5.0,
+    "endOffsetSeconds": 12.5,
+    "severity": "moderate",
+    "score": 40.6
+  },
+  {
+    "startOffsetSeconds": 12.5,
+    "endOffsetSeconds": 45.0,
+    "severity": "light",
+    "score": 27.87
+  },
+  {
+    "startOffsetSeconds": 45.0,
+    "endOffsetSeconds": 52.5,
+    "severity": "neutral",
+    "score": null
+  },
+  {
+    "startOffsetSeconds": 52.5,
+    "endOffsetSeconds": 60.0,
+    "severity": "light",
+    "score": 27.56
+  }
+]

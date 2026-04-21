@@ -12,9 +12,15 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { Info, Loader2, MapPin, Search } from "lucide-react"
-import { searchLocations, type LocationPayload, type ROIConfiguration } from "@/lib/api"
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
+import { Check, Copy, Info, Loader2, MapPin, Search } from "lucide-react"
+import {
+  parseEntryExitPointsConfiguration,
+  searchLocations,
+  type GateDirectionConfiguration,
+  type LocationPayload,
+  type ROIConfiguration,
+} from "@/lib/api"
 
 const ROI_PROMPT_TEMPLATE = `I am going to paste CVAT polygon coordinates for one camera/location. Please convert them into the exact JSON format required by my application.
 
@@ -41,6 +47,42 @@ HEIGHT = 1080
 
 Here are the raw CVAT coordinates:
 [PASTE CVAT POLYGON COORDINATES HERE]`
+
+const ENTRY_EXIT_PROMPT_TEMPLATE = `I am going to provide:
+1. the raw image
+2. the same image with my directional strip annotations
+3. the annotation file
+4. a short description of which direction should count as entering and which should count as exiting
+
+Please convert my directional strip annotations into the exact JSON format required by my application.
+
+Rules:
+1. Normalize x by image width.
+2. Normalize y by image height.
+3. Keep 6 decimal places.
+4. Output valid JSON only.
+5. Do not add explanations, markdown, comments, or extra text.
+6. The three strips must be assigned in sequential order across the pedestrian path:
+   - strip_0
+   - strip_1
+   - strip_2
+7. Use the direction description I provide to decide:
+   - path_0_1_2 = entering or exiting
+   - path_2_1_0 = the opposite
+8. Output format must be exactly:
+
+{
+  "referenceSize": [WIDTH, HEIGHT],
+  "gateDirectionZonesNorm": {
+    "strip_0": [[x1, y1], [x2, y2], [x3, y3], [x4, y4]],
+    "strip_1": [[x1, y1], [x2, y2], [x3, y3], [x4, y4]],
+    "strip_2": [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+  },
+  "directionMapping": {
+    "path_0_1_2": "entering",
+    "path_2_1_0": "exiting"
+  }
+}`
 
 const SEARCHABLE_LOCATIONS: Array<{
   aliases: string[]
@@ -177,11 +219,42 @@ export function AddLocationModal({ open, onOpenChange, initialData = null, onSub
   const [address, setAddress] = useState("")
   const [walkableAreaM2, setWalkableAreaM2] = useState("")
   const [roiCoordinatesText, setRoiCoordinatesText] = useState("")
+  const [entryExitPointsText, setEntryExitPointsText] = useState("")
   const [searchError, setSearchError] = useState<string | null>(null)
+  const [walkableAreaError, setWalkableAreaError] = useState<string | null>(null)
   const [roiError, setRoiError] = useState<string | null>(null)
+  const [entryExitPointsError, setEntryExitPointsError] = useState<string | null>(null)
   const [isSearching, setIsSearching] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [roiPromptCopied, setRoiPromptCopied] = useState(false)
+  const [entryExitPromptCopied, setEntryExitPromptCopied] = useState(false)
   const isEditing = Boolean(initialData)
+
+  const validateWalkableArea = useCallback((value: string) => {
+    if (!value.trim()) {
+      return null
+    }
+
+    const parsed = Number.parseFloat(value)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return "Walkable area must be a positive number in square meters."
+    }
+
+    return null
+  }, [])
+
+  const validateEntryExitPointsText = useCallback((value: string) => {
+    if (!value.trim()) {
+      return null
+    }
+
+    try {
+      parseEntryExitPointsConfiguration(value)
+      return null
+    } catch (error) {
+      return error instanceof Error ? error.message : "Entry/Exit Points JSON must be valid JSON."
+    }
+  }, [])
 
   const resetForm = useCallback((nextData?: LocationPayload | null) => {
     setName(nextData?.name ?? "")
@@ -192,8 +265,13 @@ export function AddLocationModal({ open, onOpenChange, initialData = null, onSub
     setAddress(nextData?.address ?? "")
     setWalkableAreaM2(nextData?.walkableAreaM2 != null ? nextData.walkableAreaM2.toString() : "")
     setRoiCoordinatesText(nextData?.roiCoordinates ? JSON.stringify(nextData.roiCoordinates, null, 2) : "")
+    setEntryExitPointsText(nextData?.entryExitPoints ? JSON.stringify(nextData.entryExitPoints, null, 2) : "")
     setSearchError(null)
+    setWalkableAreaError(null)
     setRoiError(null)
+    setEntryExitPointsError(null)
+    setRoiPromptCopied(false)
+    setEntryExitPromptCopied(false)
   }, [])
 
   useEffect(() => {
@@ -246,25 +324,68 @@ export function AddLocationModal({ open, onOpenChange, initialData = null, onSub
     }
   }, [isSearching, name, searchQuery])
 
+  const handleWalkableAreaChange = useCallback((value: string) => {
+    setWalkableAreaM2(value)
+    setWalkableAreaError(validateWalkableArea(value))
+  }, [validateWalkableArea])
+
+  const handleEntryExitPointsChange = useCallback((value: string) => {
+    setEntryExitPointsText(value)
+    setEntryExitPointsError(validateEntryExitPointsText(value))
+  }, [validateEntryExitPointsText])
+
+  const handleCopyRoiPrompt = useCallback(async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      return
+    }
+
+    await navigator.clipboard.writeText(ROI_PROMPT_TEMPLATE)
+    setRoiPromptCopied(true)
+    window.setTimeout(() => setRoiPromptCopied(false), 1800)
+  }, [])
+
+  const handleCopyEntryExitPrompt = useCallback(async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      return
+    }
+
+    await navigator.clipboard.writeText(ENTRY_EXIT_PROMPT_TEMPLATE)
+    setEntryExitPromptCopied(true)
+    window.setTimeout(() => setEntryExitPromptCopied(false), 1800)
+  }, [])
+
   const handleSubmit = async () => {
     if (!name || !latitude || !longitude || isSubmitting) return
 
     let parsedROI: ROIConfiguration | null = null
+    let parsedEntryExitPoints: GateDirectionConfiguration | null = null
     let parsedWalkableArea: number | null = null
 
     try {
       parsedROI = parseROIConfiguration(roiCoordinatesText)
       setRoiError(null)
-
-      if (walkableAreaM2.trim()) {
-        parsedWalkableArea = Number.parseFloat(walkableAreaM2)
-        if (!Number.isFinite(parsedWalkableArea) || parsedWalkableArea <= 0) {
-          throw new Error("Walkable area must be a positive number in square meters.")
-        }
-      }
     } catch (error) {
       setRoiError(error instanceof Error ? error.message : "Invalid ROI configuration.")
       return
+    }
+
+    try {
+      parsedEntryExitPoints = parseEntryExitPointsConfiguration(entryExitPointsText)
+      setEntryExitPointsError(null)
+    } catch (error) {
+      setEntryExitPointsError(error instanceof Error ? error.message : "Entry/Exit Points JSON must be valid JSON.")
+      return
+    }
+
+    const nextWalkableAreaError = validateWalkableArea(walkableAreaM2)
+    if (nextWalkableAreaError) {
+      setWalkableAreaError(nextWalkableAreaError)
+      return
+    }
+
+    setWalkableAreaError(null)
+    if (walkableAreaM2.trim()) {
+      parsedWalkableArea = Number.parseFloat(walkableAreaM2)
     }
 
     setIsSubmitting(true)
@@ -276,6 +397,7 @@ export function AddLocationModal({ open, onOpenChange, initialData = null, onSub
         description,
         address,
         roiCoordinates: parsedROI,
+        entryExitPoints: parsedEntryExitPoints,
         walkableAreaM2: parsedWalkableArea,
       })
       handleClose()
@@ -288,6 +410,8 @@ export function AddLocationModal({ open, onOpenChange, initialData = null, onSub
     resetForm(null)
     setIsSearching(false)
     setSearchError(null)
+    setRoiPromptCopied(false)
+    setEntryExitPromptCopied(false)
     onOpenChange(false)
   }
 
@@ -418,17 +542,18 @@ export function AddLocationModal({ open, onOpenChange, initialData = null, onSub
               min="0"
               placeholder="e.g., 42.5"
               value={walkableAreaM2}
-              onChange={(e) => setWalkableAreaM2(e.target.value)}
+              onChange={(e) => handleWalkableAreaChange(e.target.value)}
               className="bg-secondary border-border text-foreground placeholder:text-muted-foreground"
             />
             <p className="text-xs text-muted-foreground">Used for the congestion part of the Pedestrian Traffic Severity Index.</p>
+            {walkableAreaError && <p className="text-xs text-destructive">{walkableAreaError}</p>}
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium text-foreground">Pedestrian ROI JSON (Optional)</label>
-              <Tooltip>
-                <TooltipTrigger asChild>
+              <HoverCard openDelay={100} closeDelay={120}>
+                <HoverCardTrigger asChild>
                   <button
                     type="button"
                     aria-label="Show ROI JSON prompt help"
@@ -436,16 +561,22 @@ export function AddLocationModal({ open, onOpenChange, initialData = null, onSub
                   >
                     <Info className="h-4 w-4" />
                   </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" align="start" sideOffset={8} className="max-w-[min(32rem,calc(100vw-2rem))] rounded-xl px-3 py-3 text-left">
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-medium">Copy this prompt for AI ROI conversion:</p>
+                </HoverCardTrigger>
+                <HoverCardContent align="start" side="top" sideOffset={8} className="w-[min(32rem,calc(100vw-2rem))] rounded-xl p-3 text-left">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-medium text-foreground">Copy this prompt for AI ROI conversion:</p>
+                      <Button type="button" variant="outline" size="sm" className="border-border" onClick={() => void handleCopyRoiPrompt()}>
+                        {roiPromptCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {roiPromptCopied ? "Copied" : "Copy prompt"}
+                      </Button>
+                    </div>
                     <pre className="smooth-scrollbar max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg bg-background/15 p-3 font-mono text-[10px] leading-relaxed text-background/95 select-all">
                       {ROI_PROMPT_TEMPLATE}
                     </pre>
                   </div>
-                </TooltipContent>
-              </Tooltip>
+                </HoverCardContent>
+              </HoverCard>
             </div>
             <Textarea
               placeholder='{"referenceSize":[1920,1080],"includePolygonsNorm":[[[0.24,0.98],[0.99,0.99],[0.22,0.09]]]}'
@@ -455,6 +586,62 @@ export function AddLocationModal({ open, onOpenChange, initialData = null, onSub
             />
             <p className="text-xs text-muted-foreground">Only pedestrian foot-points inside these normalized polygons will count toward PTSI.</p>
             {roiError && <p className="text-xs text-destructive">{roiError}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-foreground">Entry/Exit Points JSON (optional)</label>
+              <HoverCard openDelay={100} closeDelay={120}>
+                <HoverCardTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="Show Entry/Exit Points JSON help"
+                    className="rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <Info className="h-4 w-4" />
+                  </button>
+                </HoverCardTrigger>
+                <HoverCardContent align="start" side="top" sideOffset={8} className="w-[min(34rem,calc(100vw-2rem))] rounded-xl p-3 text-left">
+                  <div className="space-y-3">
+                    <div className="space-y-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                      <p>This field is for directional pedestrian counting in gate views. Annotate three thin strips across the pedestrian path in sequential order: strip_0, strip_1, strip_2. Then specify whether the path 0→1→2 means entering or exiting. The reverse path will be treated as the opposite direction.</p>
+                      <ul className="list-disc space-y-1 pl-4">
+                        <li>Provide the raw image.</li>
+                        <li>Provide the image with strip annotations.</li>
+                        <li>Provide the annotation file.</li>
+                        <li>Provide a short description of which direction should count as entering and which should count as exiting.</li>
+                      </ul>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-medium text-foreground">Copy this exact ChatGPT prompt:</p>
+                      <Button type="button" variant="outline" size="sm" className="border-border" onClick={() => void handleCopyEntryExitPrompt()}>
+                        {entryExitPromptCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                        {entryExitPromptCopied ? "Copied" : "Copy prompt"}
+                      </Button>
+                    </div>
+                    <pre className="smooth-scrollbar max-h-80 overflow-y-auto whitespace-pre-wrap rounded-lg bg-background/15 p-3 font-mono text-[10px] leading-relaxed text-background/95 select-all">
+                      {ENTRY_EXIT_PROMPT_TEMPLATE}
+                    </pre>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+            </div>
+            <Textarea
+              placeholder={'{"referenceSize":[1920,1080],"gateDirectionZonesNorm":{"strip_0":[[0.74,0.62],[0.22,0.81],[0.21,0.76],[0.71,0.59]],"strip_1":[[0.78,0.68],[0.23,0.91],[0.22,0.88],[0.76,0.66]],"strip_2":[[0.86,0.76],[0.25,1],[0.24,0.99],[0.84,0.74]]},"directionMapping":{"path_0_1_2":"entering","path_2_1_0":"exiting"}}'}
+              value={entryExitPointsText}
+              onChange={(e) => handleEntryExitPointsChange(e.target.value)}
+              className="min-h-40 bg-secondary font-mono text-xs border-border text-foreground placeholder:text-muted-foreground"
+            />
+            <div className="space-y-2 text-xs text-muted-foreground">
+              <p>This field is for directional pedestrian counting in gate views. Annotate three thin strips across the pedestrian path in sequential order: strip_0, strip_1, strip_2. Then specify whether path 0→1→2 means entering or exiting. The reverse path will be treated as the opposite direction.</p>
+              <ul className="list-disc space-y-1 pl-4">
+                <li><span className="font-medium text-foreground">strip_0</span>, <span className="font-medium text-foreground">strip_1</span>, and <span className="font-medium text-foreground">strip_2</span> are ordered strips across the pedestrian path.</li>
+                <li>The actual meaning of entering vs exiting is decided through <span className="font-medium text-foreground">directionMapping.path_0_1_2</span> and <span className="font-medium text-foreground">directionMapping.path_2_1_0</span>.</li>
+              </ul>
+              <p>Direction is inferred from motion order: <span className="font-medium text-foreground">strip_0 -&gt; strip_1 -&gt; strip_2</span> or <span className="font-medium text-foreground">strip_2 -&gt; strip_1 -&gt; strip_0</span>.</p>
+              <p>When using ChatGPT to clean the annotation, provide the raw image, the image with strip annotations, the annotation file, and a short description of which direction should count as entering and which should count as exiting.</p>
+            </div>
+            {entryExitPointsError && <p className="text-xs text-destructive">{entryExitPointsError}</p>}
           </div>
         </div>
 

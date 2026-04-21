@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-04-21T09:53:53Z",
+  "videoId": "2444a2e4",
+  "label": "EDSA Sec Walk \u00b7 2026-10-23 \u00b7 01:02:02",
+  "directory": "storage/portable/videos/2444a2e4",
+  "artifacts": {
+    "metadataJson": "storage/portable/videos/2444a2e4/metadata.json",
+    "manifestJson": "storage/portable/videos/2444a2e4/manifest.json",
+    "eventsCsv": "storage/portable/videos/2444a2e4/events.csv",
+    "eventsJson": "storage/portable/videos/2444a2e4/events.json",
+    "tracksCsv": "storage/portable/videos/2444a2e4/tracks.csv",
+    "tracksJson": "storage/portable/videos/2444a2e4/tracks.json",
+    "trajectorySamplesCsv": "storage/portable/videos/2444a2e4/trajectory_samples.csv",
+    "trajectorySamplesJson": "storage/portable/videos/2444a2e4/trajectory_samples.json",
+    "timelineCsv": "storage/portable/videos/2444a2e4/timeline.csv",
+    "timelineJson": "storage/portable/videos/2444a2e4/timeline.json",
+    "wholeFootageLogCsv": "storage/portable/videos/2444a2e4/whole_footage_log.csv",
+    "wholeFootageLogJson": "storage/portable/videos/2444a2e4/whole_footage_log.json",
+    "severityBucketsCsv": "storage/portable/videos/2444a2e4/severity_buckets.csv",
+    "severityBucketsJson": "storage/portable/videos/2444a2e4/severity_buckets.json"
+  }
+}

@@ -1,9 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { BantaySidebarLogo } from "@/components/bantay-sidebar-logo"
 import { 
   ListOrdered,
   LayoutDashboard, 
@@ -21,19 +21,13 @@ export function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="flex flex-col w-20 bg-sidebar border-r border-sidebar-border h-full relative">
+    <aside className="flex h-full w-24 flex-col border-r border-sidebar-border bg-sidebar relative">
       {/* Logo & Branding */}
-      <div className="flex flex-col items-center justify-center h-28 border-b border-sidebar-border gap-2 px-2">
-        <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-elevated-sm">
-          <Image 
-            src="/logo.jpg" 
-            alt="Bantay Logo" 
-            width={48} 
-            height={48}
-            className="w-full h-full object-cover"
-          />
+      <div className="flex h-36 flex-col items-center justify-center gap-2 border-b border-sidebar-border px-2">
+        <div className="h-[4.75rem] w-[4.75rem] rounded-[1.75rem] bg-secondary/40 p-1 shadow-elevated-sm ring-1 ring-white/5">
+          <BantaySidebarLogo className="h-full w-full" />
         </div>
-        <span className="text-[10px] font-extrabold text-white tracking-widest uppercase">BANTAY</span>
+        <span className="text-[10px] font-extrabold text-white tracking-[0.28em] uppercase">BANTAY</span>
       </div>
 
       {/* Navigation */}
