@@ -32,4 +32,45 @@ To learn more, take a look at the following resources:
 - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 - [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
 
+## Backend Setup (Python/FastAPI)
+
+Use these steps to run the API locally from the repo root:
+
+```bash
+# Create a virtual environment (Windows)
+python -m venv .venv
+.venv\Scripts\activate
+
+# Create a virtual environment (macOS/Linux)
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+```bash
+# Install backend requirements
+pip install -r requirements.txt
+
+# Install FastAPI extras used by the API
+pip install "fastapi[standard]" python-multipart
+```
+
+```bash
+# Start the API server (from repo root)
+uvicorn backend.app.main:app --reload
+```
+
+## Frontend Setup (Node/Next.js)
+
+Use these steps to run the dashboard locally from the repo root:
+
+```bash
+# Install Node dependencies
+npm install
+```
+
+```bash
+# Start the frontend dev server
+npm run dev
+```
+
 <a href="https://v0.app/chat/api/kiro/clone/CornOnTheKob/v0-build-surveillance-system" alt="Open in Kiro"><img src="https://pdgvvgmkdvyeydso.public.blob.vercel-storage.com/open%20in%20kiro.svg?sanitize=true" /></a>

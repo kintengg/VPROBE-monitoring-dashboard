@@ -4,17 +4,20 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { BantaySidebarLogo } from "@/components/bantay-sidebar-logo"
-import { 
+import {
+  Car,
+  LayoutDashboard,
   ListOrdered,
-  LayoutDashboard, 
-  Video, 
-  User
+  User,
+  Video
 } from "lucide-react"
 
 const navItems = [
-  { icon: Video, label: "Surveillance", href: "/" },
+  { icon: Video, label: "Surveillance: Pedestrians", href: "/" },
+  { icon: Car, label: "Surveillance: Vehicles", href: "/vehicles" },
   { icon: ListOrdered, label: "Queue", href: "/queue" },
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+  { icon: LayoutDashboard, label: "Analytics: Pedestrians", href: "/dashboard" },
+  { icon: LayoutDashboard, label: "Analytics: Vehicles", href: "/dashboard/vehicles" },
 ]
 
 export function Sidebar() {
@@ -33,9 +36,8 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 flex flex-col items-center py-6 gap-3">
         {navItems.map((item) => {
-          const isActive = pathname === item.href || 
+          const isActive = pathname === item.href ||
             (item.href === "/" && pathname.startsWith("/video")) ||
-            (item.href === "/dashboard" && pathname === "/search") ||
             (item.href === "/queue" && pathname.startsWith("/queue"))
           return (
             <Link

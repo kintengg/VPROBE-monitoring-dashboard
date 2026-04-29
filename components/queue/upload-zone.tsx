@@ -12,7 +12,8 @@ interface QueueUploadZoneProps {
 }
 
 export function QueueUploadZone({ activeCount, queuedCount, completedCount, maxConcurrentUploads }: QueueUploadZoneProps) {
-  const uploadHref = "/?openAddVideo=1"
+  const pedestrianHref = "/?openAddVideo=1"
+  const vehicleHref = "/vehicles?openAddVideo=1"
 
   return (
     <section className="relative overflow-hidden rounded-3xl border-2 border-dashed border-border bg-card p-8 shadow-elevated-sm transition-all hover:border-primary/50 hover:bg-secondary/30">
@@ -24,14 +25,16 @@ export function QueueUploadZone({ activeCount, queuedCount, completedCount, maxC
 
           <div>
             <p className="text-white">
-              <Link href={uploadHref} className="font-semibold text-primary transition-colors hover:text-primary/80 hover:underline">
-                Open Surveillance
+              Open
+              {" "}
+              <Link href={pedestrianHref} className="font-semibold text-primary transition-colors hover:text-primary/80 hover:underline">
+                Pedestrian Surveillance
               </Link>
-              {" "}to upload your video and track it here live, or{" "}
-              <Link href={uploadHref} className="font-semibold text-primary transition-colors hover:text-primary/80 hover:underline">
-                click here
+              {" "}or{" "}
+              <Link href={vehicleHref} className="font-semibold text-primary transition-colors hover:text-primary/80 hover:underline">
+                Vehicle Surveillance
               </Link>
-              .
+              {" "}to upload footage and track it here live.
             </p>
             <p className="mt-2 text-sm text-muted-foreground">
               Background uploads continue here while you browse. Up to {maxConcurrentUploads} videos can run at the same time.
@@ -40,11 +43,18 @@ export function QueueUploadZone({ activeCount, queuedCount, completedCount, maxC
         </div>
 
         <div className="flex flex-col items-start gap-4 lg:items-end">
-          <Button asChild className="rounded-2xl px-5">
-            <Link href={uploadHref}>
-              Open Surveillance
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild className="rounded-2xl px-5">
+              <Link href={pedestrianHref}>
+                Open Pedestrians
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="rounded-2xl px-5 border-border">
+              <Link href={vehicleHref}>
+                Open Vehicles
+              </Link>
+            </Button>
+          </div>
 
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="min-w-[92px] rounded-2xl border border-border bg-secondary/60 px-3 py-2">

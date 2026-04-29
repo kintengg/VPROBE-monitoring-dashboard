@@ -10,6 +10,7 @@ const REHYDRATION_POLL_INTERVAL_MS = 1_000
 
 type UploadState = VideoUploadStatus["state"]
 type UploadPhase = VideoUploadStatus["phase"]
+type UploadJobType = "pedestrian" | "vehicle"
 
 const UPLOAD_STATES: UploadState[] = ["queued", "processing", "complete", "error", "cancelled"]
 const UPLOAD_PHASES: NonNullable<UploadPhase>[] = ["queued", "tracking", "vision", "ptsi", "finalizing"]
@@ -24,6 +25,7 @@ export interface EnqueuedUploadInput {
   startTime: string
   endTime: string
   fastMode: boolean
+  jobType?: UploadJobType
 }
 
 export interface UploadQueueItem {
@@ -37,6 +39,7 @@ export interface UploadQueueItem {
   startTime: string
   endTime: string
   fastMode: boolean
+  jobType: UploadJobType
   uploadId: string | null
   state: UploadState
   progressPercent: number | null
@@ -131,6 +134,7 @@ function summarizeUploads(uploads: UploadQueueItem[]) {
 
 function createQueuedItem(input: EnqueuedUploadInput): UploadQueueItem {
   const now = new Date().toISOString()
+  const jobType: UploadJobType = input.jobType ?? "pedestrian"
 
   return {
     id: createQueueItemId(),
@@ -143,6 +147,7 @@ function createQueuedItem(input: EnqueuedUploadInput): UploadQueueItem {
     startTime: input.startTime,
     endTime: input.endTime,
     fastMode: input.fastMode,
+    jobType,
     uploadId: null,
     state: "queued",
     progressPercent: 0,
@@ -177,6 +182,7 @@ function createUploadFromHistory(status: VideoUploadStatus): UploadQueueItem {
     startTime: status.startTime ?? "",
     endTime: status.endTime ?? "",
     fastMode: Boolean(status.fastMode),
+    jobType: "pedestrian",
     uploadId: status.uploadId,
     state: status.state,
     progressPercent: typeof status.progressPercent === "number" ? status.progressPercent : null,
@@ -222,6 +228,7 @@ function mergeUploadsWithHistory(currentUploads: UploadQueueItem[], history: Vid
       startTime: upload.startTime || historyStatus.startTime || upload.startTime,
       endTime: upload.endTime || historyStatus.endTime || upload.endTime,
       fastMode: upload.fastMode || Boolean(historyStatus.fastMode),
+      jobType: upload.jobType,
       createdAt: upload.createdAt || historyStatus.createdAt || upload.updatedAt,
       startedAt: upload.startedAt ?? historyStatus.startedAt ?? (historyStatus.state === "queued" ? null : historyStatus.updatedAt),
       completedAt: isTerminalState(historyStatus.state)
@@ -280,6 +287,7 @@ function restoreUpload(value: unknown): UploadQueueItem | null {
     startTime: upload.startTime,
     endTime: upload.endTime,
     fastMode: Boolean(upload.fastMode),
+    jobType: upload.jobType === "vehicle" ? "vehicle" : "pedestrian",
     uploadId: typeof upload.uploadId === "string" ? upload.uploadId : null,
     state: upload.state,
     progressPercent: typeof upload.progressPercent === "number" ? upload.progressPercent : null,

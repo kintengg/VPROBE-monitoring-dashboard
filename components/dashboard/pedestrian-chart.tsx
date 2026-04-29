@@ -22,7 +22,7 @@ interface PedestrianChartProps {
   timeRange: string
   selectedDate: string
   data: TrafficPoint[]
-  metricKey: "cumulativeUniquePedestrians" | "averageVisiblePedestrians"
+  metricKey: "cumulativeUniquePedestrians" | "averageVisiblePedestrians" | "los"
   metricLabel: string
   seriesColor: string
   locationTotals?: LocationTotal[]
@@ -38,7 +38,7 @@ interface PedestrianChartProps {
 }
 
 const SERIES_COLORS = ["#22C55E", "#06B6D4", "#3B82F6", "#F59E0B", "#A855F7"]
-const RESERVED_SERIES_KEYS = new Set(["id", "time", "cumulativeUniquePedestrians", "averageVisiblePedestrians"])
+const RESERVED_SERIES_KEYS = new Set(["id", "time", "cumulativeUniquePedestrians", "averageVisiblePedestrians", "los"])
 
 function formatTimeRangeLabel(timeRange: string) {
   return timeRange
@@ -64,7 +64,13 @@ function formatDateLabel(selectedDate: string) {
 }
 
 function formatMetricValue(metricKey: PedestrianChartProps["metricKey"], value: number) {
-  return metricKey === "averageVisiblePedestrians" ? value.toFixed(2) : Math.round(value).toLocaleString()
+  if (metricKey === "averageVisiblePedestrians") {
+    return value.toFixed(2)
+  }
+  if (metricKey === "los") {
+    return value.toFixed(1)
+  }
+  return Math.round(value).toLocaleString()
 }
 
 const CustomTooltip = ({
@@ -256,7 +262,7 @@ export function PedestrianChart({
           </ResponsiveContainer>
         ) : (
           <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-border text-muted-foreground">
-            No pedestrian analytics are available for this time range yet.
+            No analytics are available for this time range yet.
           </div>
         )}
       </div>

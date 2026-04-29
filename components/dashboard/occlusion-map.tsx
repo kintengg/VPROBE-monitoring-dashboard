@@ -50,10 +50,22 @@ const MAP_PIN_EXCLUSION_RADIUS = 18
 const MAP_LABEL_GAPS = [10, 18, 28]
 const LABEL_DIRECTIONS: LabelDirection[] = ["top", "top-right", "top-left", "right", "left", "bottom", "bottom-right", "bottom-left"]
 
-function formatHourLabel(hour: string) {
-  const [rawHours, rawMinutes] = hour.split(":")
+function formatHourLabel(hour?: string | null) {
+  if (typeof hour !== "string") {
+    return "N/A"
+  }
+
+  const trimmed = hour.trim()
+  if (!trimmed) {
+    return "N/A"
+  }
+
+  const [rawHours, rawMinutes] = trimmed.split(":")
   const hours = Number(rawHours)
   const minutes = Number(rawMinutes ?? 0)
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return trimmed
+  }
   const suffix = hours >= 12 ? "PM" : "AM"
   const displayHours = ((hours + 11) % 12) + 1
   return `${displayHours}:${String(minutes).padStart(2, "0")} ${suffix}`
@@ -430,7 +442,10 @@ export function OcclusionMap({ hourFilter, onHourFilterChange, data, loading = f
   const hoverCloseTimeoutRef = useRef<number | null>(null)
   const [mapDimensions, setMapDimensions] = useState<MapDimensions>(DEFAULT_MAP_DIMENSIONS)
   const locations = data?.locations ?? []
-  const availableHours = useMemo(() => Array.from(new Set(data?.availableHours ?? [])), [data?.availableHours])
+  const availableHours = useMemo(
+    () => Array.from(new Set((data?.availableHours ?? []).filter((hour): hour is string => typeof hour === "string" && hour.trim().length > 0))),
+    [data?.availableHours],
+  )
 
   const clearHoverCloseTimeout = () => {
     if (hoverCloseTimeoutRef.current !== null) {

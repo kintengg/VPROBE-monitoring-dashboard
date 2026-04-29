@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { AlertCircle, CheckCircle2, FileVideo, Loader2, MapPin, Trash2, Video, XCircle } from "lucide-react"
+import { AlertCircle, CheckCircle2, FileVideo, Loader2, MapPin, Tractor, Trash2, User, Video, XCircle } from "lucide-react"
 import type { UploadQueueItem } from "@/components/uploads/upload-queue-provider"
 import { Button } from "@/components/ui/button"
 
@@ -92,6 +92,11 @@ export function QueueItem({ upload, onCancelRequest }: QueueItemProps) {
   const progressValue = upload.state === "complete" ? 100 : upload.progressPercent ?? 0
   const canCancel = upload.state === "queued" || upload.state === "processing"
   const statusText = getStatusText(upload)
+  const isVehicle = upload.jobType === "vehicle"
+  const jobBadge = isVehicle
+    ? { label: "Vehicle", icon: Tractor, tone: "text-sky-200", bg: "bg-sky-500/15", ring: "ring-sky-500/25" }
+    : { label: "Pedestrian", icon: User, tone: "text-emerald-200", bg: "bg-emerald-500/15", ring: "ring-emerald-500/25" }
+  const JobIcon = jobBadge.icon
 
   return (
     <article className="rounded-2xl border border-border bg-card p-4 shadow-elevated-sm transition-all hover:border-border/80">
@@ -104,6 +109,12 @@ export function QueueItem({ upload, onCancelRequest }: QueueItemProps) {
           <div className="mb-2 flex items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <h3 className="truncate pr-4 font-semibold text-white">{upload.fileName}</h3>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 ${jobBadge.bg} ${jobBadge.tone} ring-1 ${jobBadge.ring}`}>
+                  <JobIcon className="h-3 w-3" />
+                  {jobBadge.label}
+                </span>
+              </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                 <span>{formatBytes(upload.fileSize)}</span>
                 <span>•</span>

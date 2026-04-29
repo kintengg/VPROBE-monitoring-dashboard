@@ -41,13 +41,21 @@ export default function QueuePage() {
     <div className="min-h-full bg-background">
       <header className="border-b border-border bg-card/50 px-6 py-4 backdrop-blur-sm">
         <div className="mx-auto max-w-4xl">
-          <Link
-            href="/"
-            className="mb-4 inline-flex items-center gap-1 text-sm text-primary transition-colors hover:text-primary/80"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Back to Surveillance
-          </Link>
+            <div className="mb-4 flex flex-wrap items-center gap-3">
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1 text-sm text-primary transition-colors hover:text-primary/80"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Back to Pedestrians
+              </Link>
+              <Link
+                href="/vehicles"
+                className="inline-flex items-center gap-1 text-sm text-primary transition-colors hover:text-primary/80"
+              >
+                Back to Vehicles
+              </Link>
+            </div>
 
           <div className="flex items-center justify-between gap-4">
             <div>
