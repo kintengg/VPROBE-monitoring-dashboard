@@ -563,48 +563,48 @@ export function getVideoPlaybackPath(video: MediaPathSource, preferProcessed = t
   return video.rawPath ?? video.processedPath ?? null
 }
 
-export function getLocations(date?: string) {
-  return request<LocationRecord[]>(withQuery("/api/locations", { date }))
+export function getLocations(date?: string, pipeline: string = 'pedestrian') {
+  return request<LocationRecord[]>(withQuery("/api/locations", { date, pipeline }))
 }
 
-export function searchLocations(query: string) {
-  return request<LocationSearchResult[]>(withQuery("/api/locations/search", { query }))
+export function searchLocations(query: string, pipeline: string = 'pedestrian') {
+  return request<LocationSearchResult[]>(withQuery("/api/locations/search", { query, pipeline }))
 }
 
-export function createLocation(payload: LocationPayload) {
-  return request<LocationRecord>("/api/locations", {
+export function createLocation(payload: LocationPayload, pipeline: string = 'pedestrian') {
+  return request<LocationRecord>(withQuery("/api/locations", { pipeline }), {
     method: "POST",
     body: JSON.stringify(payload),
   })
 }
 
-export function updateLocation(locationId: string, payload: LocationPayload) {
-  return request<LocationRecord>(`/api/locations/${locationId}` , {
+export function updateLocation(locationId: string, payload: LocationPayload, pipeline: string = 'pedestrian') {
+  return request<LocationRecord>(withQuery(`/api/locations/${locationId}`, { pipeline }) , {
     method: "PUT",
     body: JSON.stringify(payload),
   })
 }
 
-export function deleteLocation(locationId: string) {
-  return request<void>(`/api/locations/${locationId}`, {
+export function deleteLocation(locationId: string, pipeline: string = 'pedestrian') {
+  return request<void>(withQuery(`/api/locations/${locationId}`, { pipeline }), {
     method: "DELETE",
   })
 }
 
-export function getVideo(videoId: string) {
-  return request<VideoDetailRecord>(`/api/videos/${videoId}`)
+export function getVideo(videoId: string, pipeline: string = 'pedestrian') {
+  return request<VideoDetailRecord>(withQuery(`/api/videos/${videoId}`, { pipeline }))
 }
 
-export function getVideoUploadStatus(uploadId: string) {
-  return request<VideoUploadStatus>(`/api/videos/uploads/${uploadId}`)
+export function getVideoUploadStatus(uploadId: string, pipeline: string = 'pedestrian') {
+  return request<VideoUploadStatus>(withQuery(`/api/videos/uploads/${uploadId}`, { pipeline }))
 }
 
-export function getVideoUploadHistory() {
-  return request<VideoUploadStatus[]>("/api/videos/uploads/history")
+export function getVideoUploadHistory(pipeline: string = 'pedestrian') {
+  return request<VideoUploadStatus[]>(withQuery("/api/videos/uploads/history", { pipeline }))
 }
 
-export function cancelVideoUpload(uploadId: string) {
-  return request<VideoUploadStatus>(`/api/videos/uploads/${uploadId}/cancel`, {
+export function cancelVideoUpload(uploadId: string, pipeline: string = 'pedestrian') {
+  return request<VideoUploadStatus>(withQuery(`/api/videos/uploads/${uploadId}/cancel`, { pipeline }), {
     method: "POST",
   })
 }
@@ -622,6 +622,7 @@ export function uploadVideo(payload: {
   countingConfig?: string
   showLivePreview?: boolean
   fastMode?: boolean
+  pipeline?: string
   onProgress?: (status: VideoUploadStatus) => void
 }) {
   const formData = new FormData()
@@ -654,6 +655,9 @@ export function uploadVideo(payload: {
   if (typeof payload.fastMode !== "undefined") {
     formData.set("fastMode", String(Boolean(payload.fastMode)))
   }
+  if (payload.pipeline) {
+    formData.set("pipeline", payload.pipeline)
+  }
   formData.set("uploadId", uploadId)
 
   payload.onProgress?.({
@@ -676,7 +680,7 @@ export function uploadVideo(payload: {
 
     while (shouldPoll) {
       try {
-        const status = await getVideoUploadStatus(uploadId)
+        const status = await getVideoUploadStatus(uploadId, payload.pipeline)
         lastStatus = status
         payload.onProgress(status)
 
@@ -745,18 +749,18 @@ export function uploadVideo(payload: {
   })()
 }
 
-export function deleteVideo(videoId: string) {
-  return request<void>(`/api/videos/${videoId}`, {
+export function deleteVideo(videoId: string, pipeline: string = 'pedestrian') {
+  return request<void>(withQuery(`/api/videos/${videoId}`, { pipeline }), {
     method: "DELETE",
   })
 }
 
-export function getEvents(videoId?: string) {
-  return request<EventRecord[]>(withQuery("/api/events", { videoId }))
+export function getEvents(videoId?: string, pipeline: string = 'pedestrian') {
+  return request<EventRecord[]>(withQuery("/api/events", { videoId, pipeline }))
 }
 
-export function getDashboardSummary(date?: string) {
-  return request<DashboardSummary>(withQuery("/api/dashboard/summary", { date }))
+export function getDashboardSummary(date?: string, pipeline: string = 'pedestrian') {
+  return request<DashboardSummary>(withQuery("/api/dashboard/summary", { date, pipeline }))
 }
 
 export function getDashboardTraffic(
@@ -766,6 +770,7 @@ export function getDashboardTraffic(
   zoomLevel = 0,
   startTime?: string,
   locationId?: string,
+  pipeline: string = 'pedestrian',
 ) {
   return request<TrafficResponse>(withQuery("/api/dashboard/traffic", {
     date,
@@ -774,6 +779,7 @@ export function getDashboardTraffic(
     startTime,
     locationId,
     zoomLevel: zoomLevel > 0 ? String(zoomLevel) : undefined,
+    pipeline,
   }))
 }
 
@@ -783,6 +789,7 @@ export function getDashboardTrafficByLocation(
   focusTime?: string,
   zoomLevel = 0,
   startTime?: string,
+  pipeline: string = 'pedestrian',
 ) {
   return request<TrafficByLocationResponse>(withQuery("/api/dashboard/traffic-by-location", {
     date,
@@ -790,6 +797,7 @@ export function getDashboardTrafficByLocation(
     focusTime,
     startTime,
     zoomLevel: zoomLevel > 0 ? String(zoomLevel) : undefined,
+    pipeline,
   }))
 }
 
@@ -800,6 +808,7 @@ export function getDashboardLOS(
   zoomLevel = 0,
   locationId?: string,
   startTime?: string,
+  pipeline: string = 'pedestrian',
 ) {
   return request<TrafficResponse>(withQuery("/api/dashboard/los", {
     date,
@@ -808,11 +817,12 @@ export function getDashboardLOS(
     startTime,
     zoomLevel: zoomLevel > 0 ? String(zoomLevel) : undefined,
     locationId,
+    pipeline,
   }))
 }
 
-export function getDashboardOcclusion(date?: string, timeRange = "whole-day", startTime?: string) {
-  return request<PTSIMapResponse>(withQuery("/api/dashboard/occlusion", { date, timeRange, startTime }))
+export function getDashboardOcclusion(date?: string, timeRange = "whole-day", startTime?: string, pipeline: string = 'pedestrian') {
+  return request<PTSIMapResponse>(withQuery("/api/dashboard/occlusion", { date, timeRange, startTime, pipeline }))
 }
 
 export function getDashboardOcclusionTrends(
@@ -821,6 +831,7 @@ export function getDashboardOcclusionTrends(
   focusTime?: string,
   zoomLevel = 0,
   startTime?: string,
+  pipeline: string = 'pedestrian',
 ) {
   return request<PTSITrendResponse>(withQuery("/api/dashboard/occlusion-trends", {
     date,
@@ -828,6 +839,7 @@ export function getDashboardOcclusionTrends(
     focusTime,
     startTime,
     zoomLevel: zoomLevel > 0 ? String(zoomLevel) : undefined,
+    pipeline,
   }))
 }
 
@@ -839,12 +851,12 @@ export function searchVideos(query: string) {
   return request<SearchResult[]>(withQuery("/api/search", { query }))
 }
 
-export function getCurrentModel() {
-  return request<ModelInfo>("/api/models/current")
+export function getCurrentModel(pipeline: string = 'pedestrian') {
+  return request<ModelInfo>(withQuery("/api/models/current", { pipeline }))
 }
 
-export function getInferenceStatus() {
-  return request<InferenceStatus>("/api/inference/status")
+export function getInferenceStatus(pipeline: string = 'pedestrian') {
+  return request<InferenceStatus>(withQuery("/api/inference/status", { pipeline }))
 }
 
 export function getCountingConfigChoices() {

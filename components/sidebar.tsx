@@ -9,7 +9,8 @@ import {
   LayoutDashboard,
   ListOrdered,
   User,
-  Video
+  Video,
+  Settings
 } from "lucide-react"
 
 const navItems = [
@@ -18,6 +19,7 @@ const navItems = [
   { icon: ListOrdered, label: "Queue", href: "/queue" },
   { icon: LayoutDashboard, label: "Analytics: Pedestrians", href: "/dashboard" },
   { icon: LayoutDashboard, label: "Analytics: Vehicles", href: "/dashboard/vehicles" },
+  { icon: Settings, label: "Model Settings", href: "/settings" },
 ]
 
 export function Sidebar() {

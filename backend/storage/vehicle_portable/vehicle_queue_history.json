@@ -1,0 +1,22 @@
+[
+  {
+    "uploadId": "077bc78f-3339-4e8f-82f0-4361e9cf7b67",
+    "state": "error",
+    "progressPercent": null,
+    "message": "Video processing failed unexpectedly.",
+    "phase": "tracking",
+    "videoId": "87f8f237",
+    "error": "run_video_inference() takes from 1 to 4 positional arguments but 5 were given",
+    "fileName": "gate3.mp4",
+    "locationId": "gate-3",
+    "locationName": "Gate 3",
+    "date": "2026-04-29",
+    "startTime": "14:00:00",
+    "endTime": "14:01:00",
+    "fastMode": false,
+    "createdAt": "2026-04-30T03:56:30Z",
+    "startedAt": "2026-04-30T03:56:30Z",
+    "completedAt": "2026-04-30T03:56:30Z",
+    "updatedAt": "2026-04-30T03:56:30Z"
+  }
+]

@@ -232,7 +232,9 @@ class SearchResult(BaseModel):
 
 class ModelInfo(BaseModel):
     currentModel: Optional[str] = None
+    currentVehicleModel: Optional[str] = None
     uploadedAt: Optional[str] = None
+    vehicleUploadedAt: Optional[str] = None
 
 
 class InferenceStatus(BaseModel):
@@ -241,8 +243,11 @@ class InferenceStatus(BaseModel):
     preferredTag: str
     fallbackTag: str
     currentModel: Optional[str] = None
+    currentVehicleModel: Optional[str] = None
     modelPath: Optional[str] = None
+    vehicleModelPath: Optional[str] = None
     modelExists: bool
+    vehicleModelExists: bool
     ready: bool
 
 
@@ -265,3 +270,14 @@ class VideoUploadStatus(BaseModel):
     startedAt: Optional[str] = None
     completedAt: Optional[str] = None
     updatedAt: str
+
+class TrafficByLocationResponse(BaseModel):
+    timeRange: str
+    series: list[dict[str, object]] = Field(default_factory=list)
+    bucketMinutes: int = 60
+    zoomLevel: int = 0
+    canZoomIn: bool = False
+    isDrilldown: bool = False
+    focusTime: Optional[str] = None
+    windowStart: Optional[str] = None
+    windowEnd: Optional[str] = None

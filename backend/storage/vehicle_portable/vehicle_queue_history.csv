@@ -1,0 +1,2 @@
+uploadId,state,progressPercent,message,phase,videoId,error,fileName,locationId,locationName,date,startTime,endTime,fastMode,createdAt,startedAt,completedAt,updatedAt
+077bc78f-3339-4e8f-82f0-4361e9cf7b67,error,,Video processing failed unexpectedly.,tracking,87f8f237,run_video_inference() takes from 1 to 4 positional arguments but 5 were given,gate3.mp4,gate-3,Gate 3,2026-04-29,14:00:00,14:01:00,false,2026-04-30T03:56:30Z,2026-04-30T03:56:30Z,2026-04-30T03:56:30Z,2026-04-30T03:56:30Z

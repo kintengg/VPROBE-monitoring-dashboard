@@ -25,6 +25,7 @@ export interface EnqueuedUploadInput {
   startTime: string
   endTime: string
   fastMode: boolean
+  pipeline?: string
   jobType?: UploadJobType
 }
 
@@ -39,7 +40,8 @@ export interface UploadQueueItem {
   startTime: string
   endTime: string
   fastMode: boolean
-  jobType: UploadJobType
+  pipeline?: string
+  jobType?: UploadJobType
   uploadId: string | null
   state: UploadState
   progressPercent: number | null
@@ -147,7 +149,8 @@ function createQueuedItem(input: EnqueuedUploadInput): UploadQueueItem {
     startTime: input.startTime,
     endTime: input.endTime,
     fastMode: input.fastMode,
-    jobType,
+    pipeline: input.pipeline,
+    jobType: input.jobType,
     uploadId: null,
     state: "queued",
     progressPercent: 0,
@@ -556,6 +559,7 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
           startTime: queuedUpload.startTime,
           endTime: queuedUpload.endTime,
           fastMode: queuedUpload.fastMode,
+          pipeline: queuedUpload.pipeline,
           onProgress: (status) => {
             updateUpload(queueItemId, (current) => applyStatusToUpload(current, status))
           },

@@ -1432,11 +1432,17 @@ def get_model_info() -> dict[str, Any]:
     return deepcopy(load_state()["model"])
 
 
-def set_model(filename: str) -> dict[str, Any]:
+def set_model(filename: str, pipeline: str = "pedestrian") -> dict[str, Any]:
     state = load_state()
-    state["model"] = {"currentModel": filename, "uploadedAt": datetime.utcnow().isoformat(timespec="seconds") + "Z"}
+    model_state = state.setdefault("model", {})
+    if pipeline == "vehicle":
+        model_state["currentVehicleModel"] = filename
+        model_state["vehicleUploadedAt"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    else:
+        model_state["currentModel"] = filename
+        model_state["uploadedAt"] = datetime.utcnow().isoformat(timespec="seconds") + "Z"
     save_state(state)
-    return deepcopy(state["model"])
+    return deepcopy(model_state)
 
 
 def format_time_range_label(time_range: str) -> str:

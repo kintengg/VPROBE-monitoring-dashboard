@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import gemini, inference, schemas, store
+from . import gemini, inference, schemas, store, vehicle_store, vehicle_inference, vehicle_analytics
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_ENV_PATHS = (REPO_ROOT / ".env.local", REPO_ROOT / "backend" / ".env.local")
@@ -230,12 +230,14 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/locations", response_model=list[schemas.LocationRecord])
-def get_locations(date: Optional[str] = None) -> list[dict]:
+def get_locations(date: Optional[str] = None, pipeline: str = "pedestrian") -> list[dict]:
+    if pipeline == "vehicle":
+        return vehicle_store.list_locations(date)
     return store.list_locations(date)
 
 
 @app.get("/api/locations/search", response_model=list[schemas.LocationSearchResult])
-def search_locations(query: str) -> list[dict[str, Any]]:
+def search_locations(query: str, pipeline: str = "pedestrian") -> list[dict[str, Any]]:
     normalized_query = query.strip()
     if not normalized_query:
         return []
@@ -243,13 +245,17 @@ def search_locations(query: str) -> list[dict[str, Any]]:
 
 
 @app.post("/api/locations", response_model=schemas.LocationRecord, status_code=201)
-def create_location(payload: schemas.LocationCreate) -> dict:
-    return store.add_location(payload.model_dump())
+def create_location(location: schemas.LocationCreate, pipeline: str = "pedestrian") -> dict:
+    if pipeline == "vehicle":
+        return vehicle_store.add_location(location.model_dump())
+    return store.add_location(location.model_dump())
 
 
 @app.put("/api/locations/{location_id}", response_model=schemas.LocationRecord)
-def update_location(location_id: str, payload: schemas.LocationCreate) -> dict:
+def update_location(location_id: str, payload: schemas.LocationCreate, pipeline: str = "pedestrian") -> dict:
     try:
+        if pipeline == "vehicle":
+            return vehicle_store.update_location(location_id, payload.model_dump())
         return store.update_location(location_id, payload.model_dump())
     except ValueError as exc:
         if str(exc) == "Location not found":
@@ -258,21 +264,29 @@ def update_location(location_id: str, payload: schemas.LocationCreate) -> dict:
 
 
 @app.delete("/api/locations/{location_id}", status_code=204)
-def delete_location(location_id: str) -> Response:
-    deleted = store.delete_location(location_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Location not found")
-    return Response(status_code=204)
+def delete_location(location_id: str, pipeline: str = "pedestrian") -> Response:
+    if pipeline == "vehicle":
+        if vehicle_store.delete_location(location_id):
+            return Response(status_code=204)
+    else:
+        if store.delete_location(location_id):
+            return Response(status_code=204)
+    raise HTTPException(status_code=404, detail="Location not found")
 
 
 @app.get("/api/videos", response_model=list[schemas.VideoRecord])
-def get_videos() -> list[dict]:
+def get_videos(pipeline: str = "pedestrian") -> list[dict]:
+    if pipeline == "vehicle":
+        return vehicle_store.list_videos()
     return store.list_videos()
 
 
 @app.get("/api/videos/{video_id}", response_model=schemas.VideoDetailRecord)
-def get_video(video_id: str) -> dict:
-    video = store.get_video_detail(video_id)
+def get_video(video_id: str, pipeline: str = "pedestrian") -> dict:
+    if pipeline == "vehicle":
+        video = vehicle_store.get_video_detail(video_id)
+    else:
+        video = store.get_video_detail(video_id)
     if video is None:
         raise HTTPException(status_code=404, detail="Video not found")
     return video
@@ -321,19 +335,22 @@ async def upload_video(
     endTime: str = Form(...),
     fastMode: bool = Form(False),
     uploadId: Optional[str] = Form(None),
+    pipeline: str = Form("pedestrian")
 ) -> dict:
-    status = inference.ultralytics_status()
+    target_store = vehicle_store if pipeline == "vehicle" else store
+    target_inference = vehicle_inference if pipeline == "vehicle" else inference
+    status = target_inference.ultralytics_status()
     if not status["ready"]:
         if uploadId:
-            store.set_upload_status(uploadId, state="error", progress_percent=None, message="Inference engine is not ready.", error="Inference engine is not ready. Upload a valid model before processing videos.")
+            target_store.set_upload_status(uploadId, state="error", progress_percent=None, message="Inference engine is not ready.", error="Inference engine is not ready. Upload a valid model before processing videos.")
         raise HTTPException(status_code=503, detail="Inference engine is not ready. Upload a valid model before processing videos.")
 
     safe_name = safe_filename(file.filename or "video.mp4")
-    raw_target = store.RAW_VIDEOS_DIR / f"{uuid4().hex[:8]}-{safe_name}"
+    raw_target = target_store.RAW_VIDEOS_DIR / f"{uuid4().hex[:8]}-{safe_name}"
     raw_target.write_bytes(await file.read())
 
     if uploadId:
-        store.set_upload_status(
+        target_store.set_upload_status(
             uploadId,
             state="queued",
             progress_percent=0,
@@ -348,30 +365,30 @@ async def upload_video(
         )
 
     try:
-        video = store.add_video(
+        video = target_store.add_video(
             {
                 "locationId": locationId,
                 "date": date,
                 "startTime": startTime,
                 "endTime": endTime,
-                "rawPath": str(raw_target.relative_to(store.BACKEND_DIR)),
+                "rawPath": str(raw_target.relative_to(target_store.BACKEND_DIR)),
             }
         )
     except ValueError as exc:
         raw_target.unlink(missing_ok=True)
         if uploadId:
-            store.set_upload_status(uploadId, state="error", progress_percent=None, message="Video upload could not be prepared.", video_id=None, error=str(exc))
+            target_store.set_upload_status(uploadId, state="error", progress_percent=None, message="Video upload could not be prepared.", video_id=None, error=str(exc))
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     try:
         def ensure_not_cancelled() -> None:
-            if uploadId and store.is_upload_cancel_requested(uploadId):
+            if uploadId and target_store.is_upload_cancel_requested(uploadId):
                 raise InterruptedError("Video upload cancelled by user.")
 
         ensure_not_cancelled()
 
         if uploadId:
-            store.set_upload_status(
+            target_store.set_upload_status(
                 uploadId,
                 state="processing",
                 progress_percent=0,
@@ -384,7 +401,7 @@ async def upload_video(
         def handle_processing_progress(payload: dict) -> None:
             ensure_not_cancelled()
             if uploadId:
-                store.set_upload_status(
+                target_store.set_upload_status(
                     uploadId,
                     state="processing",
                     progress_percent=payload.get("progressPercent"),
@@ -397,7 +414,7 @@ async def upload_video(
         handle_processing_progress.cancel_check = ensure_not_cancelled  # type: ignore[attr-defined]
 
         result = await run_in_threadpool(
-            inference.run_video_inference,
+            target_inference.run_video_inference,
             raw_target,
             None,
             video,
@@ -406,7 +423,7 @@ async def upload_video(
         )
         ensure_not_cancelled()
         if uploadId:
-            store.set_upload_status(
+            target_store.set_upload_status(
                 uploadId,
                 state="processing",
                 progress_percent=95,
@@ -414,7 +431,7 @@ async def upload_video(
                 phase="ptsi",
                 video_id=video["id"],
             )
-        response = store.set_video_inference_result(
+        response = target_store.set_video_inference_result(
             video_id=video["id"],
             pedestrian_count=result.get("pedestrianCount", 0),
             processed_path=result.get("processedPath"),
@@ -422,56 +439,74 @@ async def upload_video(
             pedestrian_tracks=result.get("pedestrianTracks", []),
         )
         if uploadId:
-            store.set_upload_status(uploadId, state="complete", progress_percent=100, message="Video upload and processing complete.", video_id=video["id"])
+            target_store.set_upload_status(uploadId, state="complete", progress_percent=100, message="Video upload and processing complete.", video_id=video["id"])
         return response
     except InterruptedError as exc:
-        store.remove_video(video["id"])
-        store.delete_video_assets(video)
+        target_store.remove_video(video["id"])
+        target_store.delete_video_assets(video)
         if uploadId:
-            store.set_upload_status(uploadId, state="cancelled", progress_percent=None, message="Video upload cancelled.", video_id=video["id"])
+            target_store.set_upload_status(uploadId, state="cancelled", progress_percent=None, message="Video upload cancelled.", video_id=video["id"])
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError as exc:
-        store.remove_video(video["id"])
-        store.delete_video_assets(video)
+        target_store.remove_video(video["id"])
+        target_store.delete_video_assets(video)
         if uploadId:
-            store.set_upload_status(uploadId, state="error", progress_percent=None, message="Video processing failed.", video_id=video["id"], error=str(exc))
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+            target_store.set_upload_status(uploadId, state="error", progress_percent=None, message="Video processing timed out.", video_id=video["id"], error=str(exc))
+        raise HTTPException(status_code=504, detail="Video processing took too long and was aborted.") from exc
     except Exception as exc:
-        store.remove_video(video["id"])
-        store.delete_video_assets(video)
+        target_store.remove_video(video["id"])
+        target_store.delete_video_assets(video)
         if uploadId:
-            store.set_upload_status(uploadId, state="error", progress_percent=None, message="Video processing failed.", video_id=video["id"], error=str(exc))
-        raise HTTPException(status_code=500, detail=f"Video inference failed: {exc}") from exc
+            target_store.set_upload_status(uploadId, state="error", progress_percent=None, message="Video processing failed unexpectedly.", video_id=video["id"], error=str(exc))
+        raise HTTPException(status_code=500, detail="An unexpected error occurred during processing.") from exc
 
 
 @app.delete("/api/videos/{video_id}", status_code=204)
-def delete_video(video_id: str) -> Response:
-    video = store.get_video(video_id)
+def delete_video(video_id: str, pipeline: str = "pedestrian") -> Response:
+    if pipeline == "vehicle":
+        video = vehicle_store.get_video(video_id)
+        if video:
+            vehicle_store.remove_video(video_id)
+            vehicle_store.delete_video_assets(video)
+    else:
+        video = store.get_video(video_id)
+        if video:
+            store.remove_video(video_id)
+            store.delete_video_assets(video)
+    
     if video is None:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    store.remove_video(video_id)
-    store.delete_video_assets(video)
     return Response(status_code=204)
 
 
 @app.get("/api/events", response_model=list[schemas.EventRecord])
-def get_events(videoId: Optional[str] = None) -> list[dict]:
+def get_events(videoId: Optional[str] = None, pipeline: str = "pedestrian") -> list[dict]:
+    if pipeline == "vehicle":
+        return vehicle_store.list_events(videoId)
     return store.list_events(videoId)
 
 
-@app.get("/api/dashboard/summary", response_model=schemas.DashboardSummary)
-def get_dashboard_summary(date: Optional[str] = None) -> dict:
+@app.get("/api/dashboard/summary")
+def get_dashboard_summary(date: Optional[str] = None, pipeline: str = "pedestrian") -> dict:
+    if pipeline == "vehicle":
+        state, resolved_date, videos, events = vehicle_store._filtered_dashboard_records(date)
+        return vehicle_analytics.compute_vehicle_analytics(events, videos, resolved_date, "whole-day", None).get("summary", {})
     return store.dashboard_summary(date)
 
 
-@app.get("/api/dashboard/traffic", response_model=schemas.TrafficResponse)
+@app.get("/api/dashboard/traffic")
 def get_dashboard_traffic(
     date: Optional[str] = None,
     timeRange: str = "whole-day",
     focusTime: Optional[str] = None,
     zoomLevel: int = 0,
+    startTime: Optional[str] = None,
+    pipeline: str = "pedestrian",
 ) -> dict[str, object]:
+    if pipeline == "vehicle":
+        state, resolved_date, videos, events = vehicle_store._filtered_dashboard_records(date)
+        return vehicle_analytics.compute_vehicle_analytics(events, videos, resolved_date, timeRange, startTime)
     return store.dashboard_traffic(date, timeRange, focusTime, zoomLevel)
 
 
@@ -518,10 +553,39 @@ def get_inference_status() -> dict:
 
 
 @app.post("/api/models/upload", response_model=schemas.ModelInfo, status_code=201)
-async def upload_model(file: UploadFile = File(...)) -> dict:
+async def upload_model(
+    file: UploadFile = File(...),
+    pipeline: str = Form("pedestrian")
+) -> dict:
     filename = safe_filename(file.filename or "model.pt")
-    if not filename.endswith(".pt"):
-        raise HTTPException(status_code=400, detail="Only .pt model files are supported")
+    if not (filename.endswith(".pt") or filename.endswith(".pth")):
+        raise HTTPException(status_code=400, detail="Only .pt and .pth model files are supported")
     target = store.MODELS_DIR / filename
     target.write_bytes(await file.read())
-    return store.set_model(filename)
+    return store.set_model(filename, pipeline=pipeline)
+
+@app.get("/api/dashboard/traffic-by-location", response_model=schemas.TrafficByLocationResponse)
+def get_dashboard_traffic_by_location(
+    date: Optional[str] = None,
+    timeRange: str = "12h",
+    startTime: Optional[str] = None,
+    pipeline: str = "pedestrian"
+) -> dict[str, object]:
+    if pipeline == "vehicle":
+        return vehicle_store.dashboard_traffic_by_location(date=date, time_range=timeRange, start_time=startTime)
+    if hasattr(store, "dashboard_traffic_by_location"):
+        return store.dashboard_traffic_by_location(date=date, time_range=timeRange, start_time=startTime)
+    return {"series": [], "timeRange": timeRange, "bucketMinutes": 60, "zoomLevel": 0, "canZoomIn": False, "isDrilldown": False}
+
+@app.get("/api/dashboard/los", response_model=schemas.TrafficResponse)
+def get_dashboard_los(
+    date: Optional[str] = None,
+    timeRange: str = "12h",
+    startTime: Optional[str] = None,
+    pipeline: str = "pedestrian"
+) -> dict[str, object]:
+    if pipeline == "vehicle":
+        return vehicle_store.dashboard_los(date=date, time_range=timeRange, start_time=startTime)
+    if hasattr(store, "dashboard_los"):
+        return store.dashboard_los(date=date, time_range=timeRange, start_time=startTime)
+    return {"series": [], "timeRange": timeRange, "bucketMinutes": 60, "zoomLevel": 0, "canZoomIn": False, "isDrilldown": False}

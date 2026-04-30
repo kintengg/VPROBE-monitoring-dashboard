@@ -83,7 +83,9 @@ def resolve_model_path(model_name: Optional[str]) -> Optional[Path]:
 def ultralytics_status() -> dict[str, Any]:
     model_info = store.get_model_info()
     model_name = model_info.get("currentModel")
+    vehicle_model_name = model_info.get("currentVehicleModel")
     model_path = resolve_model_path(model_name)
+    vehicle_model_path = resolve_model_path(vehicle_model_name)
     vendor_dir = _prefer_vendored_ultralytics()
 
     installed = importlib.util.find_spec("ultralytics") is not None
@@ -108,8 +110,11 @@ def ultralytics_status() -> dict[str, Any]:
         "preferredTag": PREFERRED_ULTRALYTICS_TAG,
         "fallbackTag": FALLBACK_ULTRALYTICS_TAG,
         "currentModel": model_name,
+        "currentVehicleModel": vehicle_model_name,
         "modelPath": str(model_path.relative_to(store.BACKEND_DIR)) if model_path else None,
+        "vehicleModelPath": str(vehicle_model_path.relative_to(store.BACKEND_DIR)) if vehicle_model_path else None,
         "modelExists": model_path is not None,
+        "vehicleModelExists": vehicle_model_path is not None,
         "ready": installed and model_path is not None,
     }
 

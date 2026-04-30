@@ -1,0 +1,119 @@
+{
+  "model": {
+    "currentModel": "yolov8n-bytetrack.pt",
+    "uploadedAt": null,
+    "inferConfig": null
+  },
+  "locations": [
+    {
+      "id": "gate-2",
+      "name": "Gate 2",
+      "latitude": 14.6358,
+      "longitude": 121.07469,
+      "description": "Approximate camera anchor for Gate 2 pedestrian flow.",
+      "address": "Ateneo de Manila University \u00b7 Gate 2",
+      "roiCoordinates": null,
+      "walkableAreaM2": null
+    },
+    {
+      "id": "gate-2-9",
+      "name": "Gate 2.9",
+      "latitude": 14.63667,
+      "longitude": 121.07472,
+      "description": "Approximate camera anchor for Gate 2.9 pedestrian flow.",
+      "address": "Ateneo de Manila University \u00b7 Gate 2.9",
+      "roiCoordinates": {
+        "referenceSize": [
+          1920,
+          1080
+        ],
+        "includePolygonsNorm": [
+          [
+            [
+              0.24587,
+              0.988037
+            ],
+            [
+              0.995651,
+              0.997306
+            ],
+            [
+              0.219792,
+              0.098426
+            ],
+            [
+              0.196354,
+              0.101481
+            ]
+          ],
+          [
+            [
+              0.432646,
+              0.337861
+            ],
+            [
+              0.564266,
+              0.309009
+            ],
+            [
+              0.544432,
+              0.472491
+            ],
+            [
+              0.487635,
+              0.403574
+            ]
+          ],
+          [
+            [
+              0.221693,
+              0.09425
+            ],
+            [
+              0.346099,
+              0.244907
+            ],
+            [
+              0.344297,
+              0.187213
+            ]
+          ]
+        ]
+      },
+      "walkableAreaM2": null
+    },
+    {
+      "id": "gate-3",
+      "name": "Gate 3",
+      "latitude": 14.64028,
+      "longitude": 121.07472,
+      "description": "Approximate camera anchor for Gate 3 pedestrian flow.",
+      "address": "Ateneo de Manila University \u00b7 Gate 3",
+      "roiCoordinates": null,
+      "walkableAreaM2": null
+    },
+    {
+      "id": "gate-3-2",
+      "name": "Gate 3.2",
+      "latitude": 14.64055,
+      "longitude": 121.07475,
+      "description": "Approximate camera anchor for Gate 3.2 pedestrian flow.",
+      "address": "Ateneo de Manila University \u00b7 Gate 3.2",
+      "roiCoordinates": null,
+      "walkableAreaM2": null
+    },
+    {
+      "id": "gate-3-5",
+      "name": "Gate 3.5",
+      "latitude": 14.6409,
+      "longitude": 121.0748,
+      "description": "Approximate camera anchor for Gate 3.5 pedestrian flow.",
+      "address": "Ateneo de Manila University \u00b7 Gate 3.5",
+      "roiCoordinates": null,
+      "walkableAreaM2": null
+    }
+  ],
+  "videos": [],
+  "events": [],
+  "pedestrianTracks": []
+}

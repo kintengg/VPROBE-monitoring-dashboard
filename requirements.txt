@@ -1,0 +1,17 @@
+torch
+torchvision
+onnx==1.14.0
+onnxruntime==1.15.1
+pycocotools
+PyYAML
+scipy
+supervision
+transformers
+pydrive2
+timm
+thop==0.1.1-2209072238
+matplotlib
+opencv-python
+fastapi[standard]
+python-multipart
+pytest

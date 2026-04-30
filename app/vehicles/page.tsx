@@ -30,8 +30,9 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Switch } from "@/components/ui/switch"
 import { FootageDatePicker } from "@/components/ui/footage-date-picker"
-import { AlertCircle, Calendar, ChevronDown, Loader2, MapPin, Pencil, Plus, Trash2, Video } from "lucide-react"
+import { AlertCircle, Calendar, ChevronDown, Loader2, MapPin, Pencil, Plus, ScanLine, Trash2, Video } from "lucide-react"
 import {
   createLocation,
   deleteLocation,
@@ -48,6 +49,7 @@ export default function VehicleSurveillancePage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const [detectionMode, setDetectionMode] = useState(true)
   const [locationMenuOpen, setLocationMenuOpen] = useState(false)
   const [locationModalOpen, setLocationModalOpen] = useState(false)
   const [editingLocation, setEditingLocation] = useState<LocationRecord | null>(null)
@@ -67,7 +69,7 @@ export default function VehicleSurveillancePage() {
   const loadLocations = useCallback(async () => {
     setLocationsLoading(true)
     try {
-      const response = await getLocations()
+      const response = await getLocations(undefined, 'vehicle')
       setLocations(response)
       setLocationsError(null)
     } catch (error) {
@@ -80,7 +82,7 @@ export default function VehicleSurveillancePage() {
   const loadEvents = useCallback(async () => {
     setEventsLoading(true)
     try {
-      const response = await getEvents()
+      const response = await getEvents(undefined, 'vehicle')
       setEvents(response)
       setEventsError(null)
     } catch (error) {
@@ -183,9 +185,9 @@ export default function VehicleSurveillancePage() {
     try {
       setPageError(null)
       if (editingLocation) {
-        await updateLocation(editingLocation.id, data)
+        await updateLocation(editingLocation.id, data, 'vehicle')
       } else {
-        await createLocation(data)
+        await createLocation(data, 'vehicle')
       }
       await Promise.all([loadLocations(), loadEvents()])
     } catch (error) {
@@ -201,7 +203,7 @@ export default function VehicleSurveillancePage() {
     try {
       setIsDeletingLocation(true)
       setPageError(null)
-      await deleteLocation(pendingDeleteLocation.id)
+      await deleteLocation(pendingDeleteLocation.id, 'vehicle')
       if (selectedUploadLocationId === pendingDeleteLocation.id) {
         setSelectedUploadLocationId("")
       }
@@ -231,8 +233,8 @@ export default function VehicleSurveillancePage() {
       setPageError(null)
       enqueueUploads([
         {
+          pipeline: 'vehicle',
           ...upload,
-          jobType: "vehicle",
           locationName: locations.find((location) => location.id === upload.locationId)?.name ?? "Unknown location",
         },
       ])
@@ -247,17 +249,31 @@ export default function VehicleSurveillancePage() {
 
   return (
     <div className="flex h-full">
+      {/* Main Content */}
       <div className="flex-1 flex flex-col">
+        {/* Header */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm">
-          <h1 className="text-xl font-semibold text-white shrink-0 mr-6">Surveillance Overview: Vehicles</h1>
-
+          <h1 className="text-xl font-semibold text-white shrink-0 mr-6">Vehicle Surveillance Overview</h1>
+          
           <div className="flex items-center gap-3 flex-wrap justify-end">
+            {/* Date Filter */}
             <FootageDatePicker
               value={selectedDate}
               onChange={setSelectedDate}
               highlightedDates={footageDates}
               allowClear
             />
+
+            {/* Detection Mode Toggle */}
+            <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-secondary border border-border">
+              <ScanLine className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm text-foreground">Detection</span>
+              <Switch
+                checked={detectionMode}
+                onCheckedChange={setDetectionMode}
+                className="data-[state=checked]:bg-accent"
+              />
+            </div>
 
             <DropdownMenu open={locationMenuOpen} onOpenChange={setLocationMenuOpen}>
               <DropdownMenuTrigger asChild>
@@ -315,6 +331,7 @@ export default function VehicleSurveillancePage() {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Add Video Button */}
             <Button
               className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-2xl px-4 shadow-elevated-sm"
               onClick={() => handleOpenAddVideo()}
@@ -325,6 +342,7 @@ export default function VehicleSurveillancePage() {
           </div>
         </header>
 
+        {/* Video Grid */}
         <div className="flex-1 overflow-auto p-6">
           {activeError && (
             <div className="mb-4 flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
@@ -351,7 +369,7 @@ export default function VehicleSurveillancePage() {
           ) : filteredLocations.length > 0 ? (
             <VideoGrid
               locations={filteredLocations}
-              detectionMode
+              detectionMode={detectionMode}
               onAddVideoClick={handleOpenAddVideo}
             />
           ) : (
@@ -361,7 +379,7 @@ export default function VehicleSurveillancePage() {
               </div>
               <h3 className="text-lg font-medium text-foreground mb-2">No videos found</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                {selectedDate
+                {selectedDate 
                   ? `No videos available for ${new Date(selectedDate).toLocaleDateString()}`
                   : "Add a video to get started"
                 }
@@ -376,21 +394,24 @@ export default function VehicleSurveillancePage() {
         </div>
       </div>
 
+      {/* Right Sidebar */}
       <aside className="w-80 border-l border-border bg-card/30 flex flex-col h-full">
         <AISearchBar />
+        {/* Location Map - Below Search Bar */}
         <div className="px-4 pb-4">
           <LocationMap locations={filteredLocations} />
         </div>
         <EventFeed events={events} loading={eventsLoading} />
       </aside>
 
-      <AddLocationModal
-        open={locationModalOpen}
+      {/* Modals */}
+      <AddLocationModal 
+        open={locationModalOpen} 
         onOpenChange={handleLocationModalChange}
         initialData={editingLocation}
         onSubmitLocation={handleSaveLocation}
       />
-      <AddVideoModal
+      <AddVideoModal 
         open={videoModalOpen}
         onOpenChange={handleVideoModalChange}
         locations={locations.map((location) => ({ id: location.id, name: location.name }))}
