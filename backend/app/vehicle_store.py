@@ -151,6 +151,50 @@ def vehicle_summary(date: Optional[str] = None) -> dict[str, Any]:
     }
 
 
+def ensure_gate_locations_seeded() -> int:
+    """Idempotently insert each registry gate as a vehicle-domain Location row.
+
+    Also backfills `flowGroup` on any pre-existing gate rows that are missing it.
+    Returns the count of gates added or migrated.
+    """
+    state = store.load_state()
+    existing_locations = state.get("locations", [])
+    existing_by_id = {loc["id"]: loc for loc in existing_locations}
+    existing_names = {str(loc.get("name", "")).strip().casefold(): loc for loc in existing_locations}
+    changed = 0
+    for gate in gate_registry.list_gates():
+        gate_id = gate["id"]
+        existing = existing_by_id.get(gate_id) or existing_names.get(str(gate["name"]).strip().casefold())
+        if existing is not None:
+            if existing.get("flowGroup") != gate["flowGroup"]:
+                existing["flowGroup"] = gate["flowGroup"]
+                changed += 1
+            if existing.get("domain") != "vehicle":
+                existing["domain"] = "vehicle"
+                changed += 1
+            continue
+        existing_locations.append({
+            "id": gate_id,
+            "name": gate["name"],
+            "latitude": gate["latitude"],
+            "longitude": gate["longitude"],
+            "description": f"{'Entrance' if gate['flowGroup'] == 'In' else 'Exit'} gate (seeded from registry).",
+            "address": "",
+            "roiCoordinates": None,
+            "entryExitPoints": None,
+            "walkableAreaM2": None,
+            "domain": "vehicle",
+            "roadLengthM": (gate.get("defaultRoadLengthKm") or 0.0) * 1000.0 or None,
+            "laneCount": gate.get("defaultLaneCount"),
+            "flowGroup": gate["flowGroup"],
+        })
+        changed += 1
+    if changed:
+        state["locations"] = existing_locations
+        store.save_state(state)
+    return changed
+
+
 def vehicle_traffic_series(date: Optional[str] = None, bucket_minutes: int = 60) -> list[dict[str, Any]]:
     """Per-bucket In/Out counts. Empty list when no vehicle events exist yet."""
     events = list_vehicle_events(date)

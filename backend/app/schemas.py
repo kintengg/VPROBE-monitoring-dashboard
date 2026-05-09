@@ -16,6 +16,10 @@ class VideoCard(BaseModel):
     processedPath: Optional[str] = None
 
 
+LocationDomain = Literal["pedestrian", "vehicle"]
+LocationFlowGroup = Literal["In", "Out"]
+
+
 class LocationCreate(BaseModel):
     name: str
     latitude: float
@@ -25,6 +29,10 @@ class LocationCreate(BaseModel):
     roiCoordinates: Optional[dict[str, Any]] = None
     entryExitPoints: Optional[dict[str, Any]] = None
     walkableAreaM2: Optional[float] = None
+    domain: LocationDomain = "pedestrian"
+    roadLengthM: Optional[float] = None
+    laneCount: Optional[int] = None
+    flowGroup: Optional[LocationFlowGroup] = None
 
 
 class LocationRecord(LocationCreate):
@@ -102,6 +110,8 @@ class EventRecord(BaseModel):
     occlusionClass: Optional[int] = None
     vehicleClass: Optional[str] = None
     gateName: Optional[str] = None
+    trackId: Optional[int] = None
+    direction: Optional[Literal["in", "out"]] = None
 
 
 class DashboardSummary(BaseModel):

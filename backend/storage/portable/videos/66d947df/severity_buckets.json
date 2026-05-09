@@ -1,0 +1,50 @@
+[
+  {
+    "startOffsetSeconds": 0.0,
+    "endOffsetSeconds": 2.458,
+    "severity": "light",
+    "score": 28.69
+  },
+  {
+    "startOffsetSeconds": 2.458,
+    "endOffsetSeconds": 9.833,
+    "severity": "moderate",
+    "score": 48.82
+  },
+  {
+    "startOffsetSeconds": 9.833,
+    "endOffsetSeconds": 22.125,
+    "severity": "light",
+    "score": 22.76
+  },
+  {
+    "startOffsetSeconds": 22.125,
+    "endOffsetSeconds": 29.5,
+    "severity": "moderate",
+    "score": 47.14
+  },
+  {
+    "startOffsetSeconds": 29.5,
+    "endOffsetSeconds": 34.417,
+    "severity": "light",
+    "score": 28.69
+  },
+  {
+    "startOffsetSeconds": 34.417,
+    "endOffsetSeconds": 39.333,
+    "severity": "moderate",
+    "score": 35.79
+  },
+  {
+    "startOffsetSeconds": 39.333,
+    "endOffsetSeconds": 51.625,
+    "severity": "light",
+    "score": 27.32
+  },
+  {
+    "startOffsetSeconds": 51.625,
+    "endOffsetSeconds": 59.0,
+    "severity": "moderate",
+    "score": 47.64
+  }
+]

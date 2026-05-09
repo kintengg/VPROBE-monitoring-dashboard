@@ -168,6 +168,9 @@ export function hasValidEntryExitPointsConfiguration(value: unknown): value is G
   }
 }
 
+export type LocationDomain = "pedestrian" | "vehicle"
+export type LocationFlowGroup = "In" | "Out"
+
 export interface LocationRecord {
   id: string
   name: string
@@ -178,6 +181,10 @@ export interface LocationRecord {
   roiCoordinates?: ROIConfiguration | null
   entryExitPoints?: GateDirectionConfiguration | null
   walkableAreaM2?: number | null
+  domain?: LocationDomain | null
+  roadLengthM?: number | null
+  laneCount?: number | null
+  flowGroup?: LocationFlowGroup | null
   videos: VideoCard[]
 }
 
@@ -248,6 +255,8 @@ export interface EventRecord {
   occlusionClass?: number | null
   vehicleClass?: string | null
   gateName?: string | null
+  trackId?: number | null
+  direction?: "in" | "out" | null
 }
 
 export interface DashboardSummary {
@@ -625,8 +634,10 @@ export function getVideoPlaybackPath(video: MediaPathSource, preferProcessed = t
   return video.rawPath ?? video.processedPath ?? null
 }
 
-export function getLocations(date?: string) {
-  return request<LocationRecord[]>(withQuery("/api/locations", { date }))
+export function getLocations(options?: { date?: string; domain?: LocationDomain }) {
+  return request<LocationRecord[]>(
+    withQuery("/api/locations", { date: options?.date, domain: options?.domain }),
+  )
 }
 
 export function searchLocations(query: string) {

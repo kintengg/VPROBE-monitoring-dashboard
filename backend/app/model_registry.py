@@ -32,10 +32,10 @@ DOMAIN_DEFAULTS: dict[str, dict[str, Any]] = {
 SEED_WEIGHTS: dict[str, list[dict[str, Any]]] = {
     "pedestrian": [
         {
-            "id": "hybrid_2000_fold3",
-            "filename": "hybrid_2000_fold3.pt",
-            "relativePath": "hybrid_2000_fold3.pt",
-            "label": "Hybrid 2000 Fold-3 (default)",
+            "id": "best",
+            "filename": "best.pt",
+            "relativePath": "best.pt",
+            "label": "best.pt — pedestrian occlusion (light/moderate/heavy)",
         },
     ],
     "vehicle": [
@@ -43,7 +43,7 @@ SEED_WEIGHTS: dict[str, list[dict[str, Any]]] = {
             "id": "fastervit-0",
             "filename": "fastervit-0.pth",
             "relativePath": "../../Occlusion-Robust-RTDETR/weights/fastervit/fastervit-0.pth",
-            "label": "FasterViT-0 RT-DETR (default)",
+            "label": "FasterViT-0 RT-DETR (Occlusion-Robust-RTDETR)",
         },
     ],
 }

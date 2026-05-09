@@ -172,8 +172,8 @@ export default function UnifiedLandingPage() {
             label="Walkways monitored"
             value={String(pedestrianLocations.length)}
             sub="Triangle pins on the map"
-            href="/pedestrian/dashboard"
-            onClick={() => router.push("/pedestrian/dashboard")}
+            href="/pedestrian/overview"
+            onClick={() => router.push("/pedestrian/overview")}
             tone="ped"
           />
           <DomainStatCard
@@ -181,8 +181,8 @@ export default function UnifiedLandingPage() {
             label="Gates monitored"
             value={String(vehicleGates.length)}
             sub="Circle pins on the map"
-            href="/vehicle/dashboard"
-            onClick={() => router.push("/vehicle/dashboard")}
+            href="/vehicle/overview"
+            onClick={() => router.push("/vehicle/overview")}
             tone="veh"
           />
         </div>

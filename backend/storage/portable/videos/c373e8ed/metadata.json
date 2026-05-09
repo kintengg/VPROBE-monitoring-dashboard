@@ -1,0 +1,45 @@
+{
+  "generatedAt": "2026-05-09T14:17:38Z",
+  "video": {
+    "id": "c373e8ed",
+    "locationId": "gate-2-9",
+    "location": "Gate 2.9",
+    "timestamp": "22:10:00",
+    "date": "2026-05-09",
+    "startTime": "22:10:00",
+    "endTime": "22:12:01",
+    "gpsLat": 14.640421,
+    "gpsLng": 121.074759,
+    "pedestrianCount": 27,
+    "rawPath": "storage/videos/raw/a5a5516f-6to6_g29---2min.mp4",
+    "processedPath": "storage/videos/processed/c373e8ed/a5a5516f-6to6_g29---2min.mp4"
+  },
+  "location": {
+    "id": "gate-2-9",
+    "name": "Gate 2.9",
+    "latitude": 14.640421,
+    "longitude": 121.074759,
+    "description": "Exit gate (seeded from registry).",
+    "address": "",
+    "roiCoordinates": null,
+    "entryExitPoints": null,
+    "walkableAreaM2": null,
+    "domain": "vehicle",
+    "roadLengthM": 50.0,
+    "laneCount": 2
+  },
+  "counts": {
+    "pedestrianCount": 27,
+    "eventCount": 27,
+    "trackCount": 0,
+    "trajectorySampleCount": 0,
+    "timelineRowCount": 121,
+    "wholeFootageLogRowCount": 121,
+    "severityBucketCount": 0
+  },
+  "severitySummary": {
+    "bucketCount": 0,
+    "sampledSeconds": 0,
+    "buckets": []
+  }
+}

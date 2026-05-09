@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import gemini, inference, model_registry, schemas, store, vehicle_store
+from . import gemini, inference, model_registry, schemas, store, vehicle_inference, vehicle_store
 from .vehicle import counting as vehicle_counting
 from .vehicle import gates as vehicle_gates
 
@@ -148,6 +148,7 @@ def search_google_places(query: str) -> list[dict[str, Any]]:
 def startup() -> None:
     store.ensure_storage_layout()
     model_registry.init_registry()
+    vehicle_store.ensure_gate_locations_seeded()
 
 
 def _video_needs_search_backfill(state: dict[str, Any], video: dict[str, Any]) -> bool:
@@ -233,8 +234,8 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/locations", response_model=list[schemas.LocationRecord])
-def get_locations(date: Optional[str] = None) -> list[dict]:
-    return store.list_locations(date)
+def get_locations(date: Optional[str] = None, domain: Optional[str] = None) -> list[dict]:
+    return store.list_locations(date, domain)
 
 
 @app.get("/api/locations/search", response_model=list[schemas.LocationSearchResult])
@@ -325,11 +326,24 @@ async def upload_video(
     fastMode: bool = Form(False),
     uploadId: Optional[str] = Form(None),
 ) -> dict:
-    status = inference.ultralytics_status()
-    if not status["ready"]:
-        if uploadId:
-            store.set_upload_status(uploadId, state="error", progress_percent=None, message="Inference engine is not ready.", error="Inference engine is not ready. Upload a valid model before processing videos.")
-        raise HTTPException(status_code=503, detail="Inference engine is not ready. Upload a valid model before processing videos.")
+    target_location = next(
+        (loc for loc in store.list_locations() if loc["id"] == locationId),
+        None,
+    )
+    target_domain = (target_location.get("domain") if target_location else None) or "pedestrian"
+
+    if target_domain == "pedestrian":
+        status = inference.ultralytics_status()
+        if not status["ready"]:
+            if uploadId:
+                store.set_upload_status(uploadId, state="error", progress_percent=None, message="Inference engine is not ready.", error="Inference engine is not ready. Upload a valid model before processing videos.")
+            raise HTTPException(status_code=503, detail="Inference engine is not ready. Upload a valid model before processing videos.")
+    else:
+        if model_registry.active_weight_path("vehicle") is None:
+            detail = "Vehicle inference model is missing. Visit /models to upload one."
+            if uploadId:
+                store.set_upload_status(uploadId, state="error", progress_percent=None, message=detail, error=detail)
+            raise HTTPException(status_code=503, detail=detail)
 
     safe_name = safe_filename(file.filename or "video.mp4")
     raw_target = store.RAW_VIDEOS_DIR / f"{uuid4().hex[:8]}-{safe_name}"
@@ -399,31 +413,56 @@ async def upload_video(
 
         handle_processing_progress.cancel_check = ensure_not_cancelled  # type: ignore[attr-defined]
 
-        result = await run_in_threadpool(
-            inference.run_video_inference,
-            raw_target,
-            None,
-            video,
-            fastMode,
-            handle_processing_progress,
-        )
-        ensure_not_cancelled()
-        if uploadId:
-            store.set_upload_status(
-                uploadId,
-                state="processing",
-                progress_percent=95,
-                message="Calculating Pedestrian Traffic Severity Index...",
-                phase="ptsi",
-                video_id=video["id"],
+        if target_domain == "vehicle":
+            result = await run_in_threadpool(
+                vehicle_inference.run_vehicle_inference,
+                raw_target,
+                video,
+                progress_callback=handle_processing_progress,
             )
-        response = store.set_video_inference_result(
-            video_id=video["id"],
-            pedestrian_count=result.get("pedestrianCount", 0),
-            processed_path=result.get("processedPath"),
-            events=result.get("events", []),
-            pedestrian_tracks=result.get("pedestrianTracks", []),
-        )
+            ensure_not_cancelled()
+            if uploadId:
+                store.set_upload_status(
+                    uploadId,
+                    state="processing",
+                    progress_percent=96,
+                    message="Persisting vehicle detections...",
+                    phase="finalizing",
+                    video_id=video["id"],
+                )
+            response = store.set_video_inference_result(
+                video_id=video["id"],
+                pedestrian_count=int(result.get("vehicleCount") or 0),
+                processed_path=result.get("processedPath"),
+                events=result.get("events", []),
+                pedestrian_tracks=[],
+            )
+        else:
+            result = await run_in_threadpool(
+                inference.run_video_inference,
+                raw_target,
+                None,
+                video,
+                fastMode,
+                handle_processing_progress,
+            )
+            ensure_not_cancelled()
+            if uploadId:
+                store.set_upload_status(
+                    uploadId,
+                    state="processing",
+                    progress_percent=95,
+                    message="Calculating Pedestrian Traffic Severity Index...",
+                    phase="ptsi",
+                    video_id=video["id"],
+                )
+            response = store.set_video_inference_result(
+                video_id=video["id"],
+                pedestrian_count=result.get("pedestrianCount", 0),
+                processed_path=result.get("processedPath"),
+                events=result.get("events", []),
+                pedestrian_tracks=result.get("pedestrianTracks", []),
+            )
         if uploadId:
             store.set_upload_status(uploadId, state="complete", progress_percent=100, message="Video upload and processing complete.", video_id=video["id"])
         return response

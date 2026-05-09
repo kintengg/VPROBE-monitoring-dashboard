@@ -1,6 +1,6 @@
 "use client"
 
-import { Calendar, Clock, MapPin, Users } from "lucide-react"
+import { Calendar, Car, Clock, MapPin, Users } from "lucide-react"
 
 interface VideoMetadataProps {
   date: string
@@ -10,17 +10,21 @@ interface VideoMetadataProps {
   gpsLng: number
   trackedPedestriansSoFar: number
   pedestrianCount: number
+  isVehicle?: boolean
 }
 
-export function VideoMetadata({ 
-  date, 
-  startTime, 
-  endTime, 
-  gpsLat, 
+export function VideoMetadata({
+  date,
+  startTime,
+  endTime,
+  gpsLat,
   gpsLng,
   trackedPedestriansSoFar,
-  pedestrianCount 
+  pedestrianCount,
+  isVehicle = false,
 }: VideoMetadataProps) {
+  const subjectIcon = isVehicle ? Car : Users
+  const totalLabel = isVehicle ? "Total Vehicles" : "Total Pedestrians"
   return (
     <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
       <MetadataCard
@@ -39,14 +43,14 @@ export function VideoMetadata({
         value={`${gpsLat.toFixed(4)}, ${gpsLng.toFixed(4)}`}
       />
       <MetadataCard
-        icon={Users}
+        icon={subjectIcon}
         label="Tracked So Far"
         value={trackedPedestriansSoFar.toString()}
         highlight
       />
       <MetadataCard
-        icon={Users}
-        label="Total Pedestrians"
+        icon={subjectIcon}
+        label={totalLabel}
         value={pedestrianCount.toString()}
         highlight
       />

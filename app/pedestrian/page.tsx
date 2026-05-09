@@ -1,454 +1,432 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { VideoGrid } from "@/components/surveillance/video-grid"
-import { EventFeed } from "@/components/surveillance/event-feed"
-import { AISearchBar } from "@/components/surveillance/ai-search-bar"
-import { AddLocationModal } from "@/components/surveillance/add-location-modal"
-import { AddVideoModal } from "@/components/surveillance/add-video-modal"
-import { LocationMap } from "@/components/surveillance/location-map"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { Button } from "@/components/ui/button"
+import { useCallback, useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { KPICards } from "@/components/dashboard/kpi-cards"
+import { PedestrianChart } from "@/components/dashboard/pedestrian-chart"
+import { OcclusionTrendsChart } from "@/components/dashboard/occlusion-trends-chart"
+import { OcclusionMap } from "@/components/dashboard/occlusion-map"
+import { AISynthesis } from "@/components/dashboard/ai-synthesis"
 import { useUploadQueue } from "@/components/uploads/upload-queue-provider"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Switch } from "@/components/ui/switch"
+import { Button } from "@/components/ui/button"
 import { FootageDatePicker } from "@/components/ui/footage-date-picker"
-import { AlertCircle, Calendar, ChevronDown, Loader2, MapPin, Pencil, Plus, ScanLine, Trash2, Video } from "lucide-react"
 import {
-  createLocation,
-  deleteLocation,
-  getEvents,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { AlertCircle, Clock, Download, FileCode, Loader2, RefreshCw, Settings2, Upload } from "lucide-react"
+import {
+  downloadDashboardReport,
+  getAISynthesis,
+  getCurrentModel,
+  getDashboardOcclusion,
+  getDashboardOcclusionTrends,
+  getDashboardSummary,
+  getDashboardTraffic,
   getLocations,
-  type EventRecord,
-  type LocationPayload,
-  type LocationRecord,
-  updateLocation,
+  uploadModel,
+  type AISynthesisResponse,
+  type DashboardSummary,
+  type ModelInfo,
+  type PTSIMapResponse,
+  type PTSITrendResponse,
+  type TrafficResponse,
 } from "@/lib/api"
 
-export default function SurveillancePage() {
-  const { enqueueUploads, settledUploadsVersion } = useUploadQueue()
+export default function DashboardPage() {
   const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const [detectionMode, setDetectionMode] = useState(true)
-  const [locationMenuOpen, setLocationMenuOpen] = useState(false)
-  const [locationModalOpen, setLocationModalOpen] = useState(false)
-  const [editingLocation, setEditingLocation] = useState<LocationRecord | null>(null)
-  const [pendingDeleteLocation, setPendingDeleteLocation] = useState<LocationRecord | null>(null)
-  const [isDeletingLocation, setIsDeletingLocation] = useState(false)
-  const [videoModalOpen, setVideoModalOpen] = useState(false)
-  const [selectedUploadLocationId, setSelectedUploadLocationId] = useState("")
-  const [selectedDate, setSelectedDate] = useState("")
-  const [locations, setLocations] = useState<LocationRecord[]>([])
-  const [events, setEvents] = useState<EventRecord[]>([])
-  const [locationsLoading, setLocationsLoading] = useState(true)
-  const [eventsLoading, setEventsLoading] = useState(true)
-  const [pageError, setPageError] = useState<string | null>(null)
-  const [locationsError, setLocationsError] = useState<string | null>(null)
-  const [eventsError, setEventsError] = useState<string | null>(null)
+  const { settledUploadsVersion } = useUploadQueue()
+  const [selectedDate, setSelectedDate] = useState("2026-03-15")
+  const [timeRange, setTimeRange] = useState("whole-day")
+  const [hourFilter, setHourFilter] = useState("all")
+  const [focusTime, setFocusTime] = useState<string | undefined>(undefined)
+  const [zoomLevel, setZoomLevel] = useState(0)
+  const [modelDialogOpen, setModelDialogOpen] = useState(false)
+  const [modelFile, setModelFile] = useState<File | null>(null)
+  const [summary, setSummary] = useState<DashboardSummary | null>(null)
+  const [traffic, setTraffic] = useState<TrafficResponse | null>(null)
+  const [occlusionTrends, setOcclusionTrends] = useState<PTSITrendResponse | null>(null)
+  const [occlusion, setOcclusion] = useState<PTSIMapResponse | null>(null)
+  const [synthesis, setSynthesis] = useState<AISynthesisResponse | null>(null)
+  const [footageDates, setFootageDates] = useState<string[]>([])
+  const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
+  const [dashboardLoading, setDashboardLoading] = useState(true)
+  const [modelLoading, setModelLoading] = useState(true)
+  const [modelUploading, setModelUploading] = useState(false)
+  const [reportExporting, setReportExporting] = useState(false)
+  const [dashboardError, setDashboardError] = useState<string | null>(null)
+  const [modelError, setModelError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
-  const loadLocations = useCallback(async () => {
-    setLocationsLoading(true)
+  const loadDashboard = useCallback(async () => {
+    setDashboardLoading(true)
     try {
-      const response = await getLocations()
-      setLocations(response)
-      setLocationsError(null)
+      const [summaryResponse, trafficResponse, occlusionTrendsResponse, occlusionResponse, synthesisResponse] = await Promise.all([
+        getDashboardSummary(selectedDate || undefined),
+        getDashboardTraffic(selectedDate || undefined, timeRange, focusTime, zoomLevel),
+        getDashboardOcclusionTrends(selectedDate || undefined, timeRange, focusTime, zoomLevel),
+        getDashboardOcclusion(selectedDate || undefined, timeRange),
+        getAISynthesis(selectedDate, timeRange),
+      ])
+
+      setSummary(summaryResponse)
+      setTraffic(trafficResponse)
+      setOcclusionTrends(occlusionTrendsResponse)
+      setOcclusion(occlusionResponse)
+      setSynthesis(synthesisResponse)
+      setDashboardError(null)
     } catch (error) {
-      setLocationsError(error instanceof Error ? error.message : "Failed to load locations.")
+      setSummary(null)
+      setTraffic(null)
+      setOcclusionTrends(null)
+      setOcclusion(null)
+      setSynthesis(null)
+      setDashboardError(error instanceof Error ? error.message : "Failed to load dashboard data.")
     } finally {
-      setLocationsLoading(false)
+      setDashboardLoading(false)
+    }
+  }, [focusTime, selectedDate, timeRange, zoomLevel])
+
+  const loadModelInfo = useCallback(async () => {
+    setModelLoading(true)
+    try {
+      const response = await getCurrentModel()
+      setModelInfo(response)
+      setModelError(null)
+    } catch (error) {
+      setModelError(error instanceof Error ? error.message : "Failed to load model information.")
+    } finally {
+      setModelLoading(false)
     }
   }, [])
 
-  const loadEvents = useCallback(async () => {
-    setEventsLoading(true)
+  const loadFootageDates = useCallback(async () => {
     try {
-      const response = await getEvents()
-      setEvents(response)
-      setEventsError(null)
-    } catch (error) {
-      setEventsError(error instanceof Error ? error.message : "Failed to load events.")
-    } finally {
-      setEventsLoading(false)
+      const response = await getLocations({ domain: "pedestrian" })
+      setFootageDates(Array.from(new Set(response.flatMap((location) => location.videos.map((video) => video.date)))).sort())
+    } catch {
+      // Leave existing date highlights untouched if this auxiliary request fails.
     }
   }, [])
 
   useEffect(() => {
-    void loadLocations()
-  }, [loadLocations])
+    void loadDashboard()
+  }, [loadDashboard])
 
   useEffect(() => {
-    void loadEvents()
-  }, [loadEvents])
+    void loadModelInfo()
+  }, [loadModelInfo])
+
+  useEffect(() => {
+    void loadFootageDates()
+  }, [loadFootageDates])
 
   useEffect(() => {
     if (settledUploadsVersion === 0) {
       return
     }
 
-    void Promise.all([loadLocations(), loadEvents()])
-  }, [loadEvents, loadLocations, settledUploadsVersion])
-
-  const filteredLocations = useMemo(() => {
-    if (!selectedDate) return locations
-
-    return locations.map((location) => ({
-      ...location,
-      videos: location.videos.filter((video) => video.date === selectedDate),
-    }))
-  }, [locations, selectedDate])
-
-  const hasAnyVideosForSelectedDate = useMemo(
-    () => filteredLocations.some((location) => location.videos.length > 0),
-    [filteredLocations],
-  )
-  const footageDates = useMemo(
-    () => Array.from(new Set(locations.flatMap((location) => location.videos.map((video) => video.date)))).sort(),
-    [locations],
-  )
-
-  const handleVideoModalChange = (open: boolean) => {
-    setVideoModalOpen(open)
-    if (!open) {
-      setSelectedUploadLocationId("")
-    }
-  }
-
-  const handleLocationModalChange = (open: boolean) => {
-    setLocationModalOpen(open)
-    if (!open) {
-      setEditingLocation(null)
-    }
-  }
-
-  const handleOpenAddVideo = useCallback((locationId?: string) => {
-    setSelectedUploadLocationId(locationId ?? "")
-    setVideoModalOpen(true)
-  }, [])
+    void loadDashboard()
+    void loadFootageDates()
+  }, [loadDashboard, loadFootageDates, settledUploadsVersion])
 
   useEffect(() => {
-    if (searchParams.get("openAddVideo") !== "1") {
+    if (hourFilter !== "all" && !occlusion?.availableHours.includes(hourFilter)) {
+      setHourFilter("all")
+    }
+  }, [hourFilter, occlusion])
+
+  const handleModelUpload = async () => {
+    if (!modelFile) {
       return
     }
 
-    handleOpenAddVideo()
-
-    const nextParams = new URLSearchParams(searchParams.toString())
-    nextParams.delete("openAddVideo")
-    const nextQuery = nextParams.toString()
-    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false })
-  }, [handleOpenAddVideo, pathname, router, searchParams])
-
-  const handleOpenAddLocation = () => {
-    setLocationMenuOpen(false)
-    setTimeout(() => {
-      setEditingLocation(null)
-      setLocationModalOpen(true)
-    }, 0)
-  }
-
-  const handleOpenEditLocation = (location: LocationRecord) => {
-    setLocationMenuOpen(false)
-    setTimeout(() => {
-      setEditingLocation(location)
-      setLocationModalOpen(true)
-    }, 0)
-  }
-
-  const handleOpenDeleteLocation = (location: LocationRecord) => {
-    setLocationMenuOpen(false)
-    setTimeout(() => {
-      setPendingDeleteLocation(location)
-    }, 0)
-  }
-
-  const handleSaveLocation = async (data: LocationPayload) => {
+    setModelUploading(true)
     try {
-      setPageError(null)
-      if (editingLocation) {
-        await updateLocation(editingLocation.id, data)
-      } else {
-        await createLocation(data)
-      }
-      await Promise.all([loadLocations(), loadEvents()])
+      const response = await uploadModel(modelFile)
+      setModelInfo(response)
+      setModelError(null)
+      setModelDialogOpen(false)
+      setModelFile(null)
     } catch (error) {
-      const message = error instanceof Error ? error.message : editingLocation ? "Failed to update location." : "Failed to create location."
-      setPageError(message)
-      throw error
-    }
-  }
-
-  const handleDeleteSelectedLocation = async () => {
-    if (!pendingDeleteLocation || isDeletingLocation) return
-
-    try {
-      setIsDeletingLocation(true)
-      setPageError(null)
-      await deleteLocation(pendingDeleteLocation.id)
-      if (selectedUploadLocationId === pendingDeleteLocation.id) {
-        setSelectedUploadLocationId("")
-      }
-      if (editingLocation?.id === pendingDeleteLocation.id) {
-        setEditingLocation(null)
-        setLocationModalOpen(false)
-      }
-      setPendingDeleteLocation(null)
-      await Promise.all([loadLocations(), loadEvents()])
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to delete location."
-      setPageError(message)
+      setModelError(error instanceof Error ? error.message : "Failed to upload model.")
     } finally {
-      setIsDeletingLocation(false)
+      setModelUploading(false)
     }
   }
 
-  const handleAddVideo = async (upload: {
-    file: File
-    locationId: string
-    date: string
-    startTime: string
-    endTime: string
-    fastMode: boolean
-  }) => {
+  const handleExportReport = async () => {
+    setReportExporting(true)
+    setActionError(null)
+
     try {
-      setPageError(null)
-      enqueueUploads([
-        {
-          ...upload,
-          locationName: locations.find((location) => location.id === upload.locationId)?.name ?? "Unknown location",
-        },
-      ])
+      const { blob, filename } = await downloadDashboardReport(selectedDate, timeRange)
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = downloadUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(downloadUrl)
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to queue video upload."
-      setPageError(message)
-      throw error
+      setActionError(error instanceof Error ? error.message : "Failed to export report.")
+    } finally {
+      setReportExporting(false)
     }
   }
 
-  const activeError = pageError ?? locationsError ?? eventsError
+  const currentModelLabel = modelInfo?.currentModel ?? "No model uploaded yet"
+  const currentModelTimestamp = modelInfo?.uploadedAt ? new Date(modelInfo.uploadedAt).toLocaleString("en-US") : null
+  const bannerError = dashboardError ?? modelError ?? actionError
+
+  const handleDateChange = (value: string) => {
+    setSelectedDate(value)
+    setFocusTime(undefined)
+    setZoomLevel(0)
+  }
+
+  const handleTimeRangeChange = (value: string) => {
+    setTimeRange(value)
+    setFocusTime(undefined)
+    setZoomLevel(0)
+  }
+
+  const handleAnalyticsZoom = (time: string) => {
+    if (!(traffic?.canZoomIn ?? occlusionTrends?.canZoomIn ?? false)) {
+      return
+    }
+
+    setFocusTime(time)
+    setZoomLevel((current) => current + 1)
+  }
+
+  const handleResetZoom = () => {
+    setFocusTime(undefined)
+    setZoomLevel(0)
+  }
 
   return (
-    <div className="flex h-full">
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm">
-          <h1 className="text-xl font-semibold text-white shrink-0 mr-6">Pedestrian Surveillance Overview</h1>
-          
-          <div className="flex items-center gap-3 flex-wrap justify-end">
-            {/* Date Filter */}
-            <FootageDatePicker
-              value={selectedDate}
-              onChange={setSelectedDate}
-              highlightedDates={footageDates}
-              allowClear
-            />
+    <div className="flex h-full flex-col">
+      <header className="flex items-center justify-between border-b border-border bg-card/50 px-6 py-4 backdrop-blur-sm">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">System Analytics Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Real-time pedestrian tracking metrics</p>
+        </div>
 
-            {/* Detection Mode Toggle */}
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-secondary border border-border">
-              <ScanLine className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm text-foreground">Detection</span>
-              <Switch
-                checked={detectionMode}
-                onCheckedChange={setDetectionMode}
-                className="data-[state=checked]:bg-accent"
-              />
-            </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" className="rounded-2xl" onClick={() => router.push("/pedestrian/overview")}>
+            Open Overview
+          </Button>
+          <FootageDatePicker
+            value={selectedDate}
+            onChange={handleDateChange}
+            highlightedDates={footageDates}
+            placeholder="Select date"
+          />
 
-            <DropdownMenu open={locationMenuOpen} onOpenChange={setLocationMenuOpen}>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="border-border text-foreground hover:bg-secondary rounded-2xl px-4">
-                  <MapPin className="w-4 h-4 mr-2" />
-                  Location
-                  <ChevronDown className="ml-2 h-4 w-4" />
+          <Select value={timeRange} onValueChange={handleTimeRangeChange}>
+            <SelectTrigger className="w-44 rounded-2xl border-border bg-secondary text-foreground">
+              <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
+              <SelectValue placeholder="Select time range" />
+            </SelectTrigger>
+            <SelectContent className="rounded-xl border-border bg-popover">
+              <SelectItem value="whole-day" className="rounded-lg text-foreground">Whole Day</SelectItem>
+              <SelectItem value="last-1h" className="rounded-lg text-foreground">Last 1 Hour</SelectItem>
+              <SelectItem value="last-3h" className="rounded-lg text-foreground">Last 3 Hours</SelectItem>
+              <SelectItem value="last-6h" className="rounded-lg text-foreground">Last 6 Hours</SelectItem>
+              <SelectItem value="last-12h" className="rounded-lg text-foreground">Last 12 Hours</SelectItem>
+              <SelectItem value="morning" className="rounded-lg text-foreground">Morning (6AM-12PM)</SelectItem>
+              <SelectItem value="afternoon" className="rounded-lg text-foreground">Afternoon (12PM-6PM)</SelectItem>
+              <SelectItem value="evening" className="rounded-lg text-foreground">Evening (6PM-12AM)</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Dialog open={modelDialogOpen} onOpenChange={setModelDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="rounded-2xl border-border px-4 text-foreground hover:bg-secondary">
+                <Settings2 className="mr-2 h-4 w-4" />
+                Edit Model
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md rounded-3xl border-border bg-card">
+              <DialogHeader>
+                <DialogTitle className="text-foreground">Detection Model Settings</DialogTitle>
+                <DialogDescription className="text-muted-foreground">
+                  Upload a PyTorch model file (.pt) for pedestrian detection
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 pt-4">
+                <div className="rounded-2xl border border-border bg-secondary p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/20">
+                      <FileCode className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Current Model</p>
+                      <p className="text-xs text-muted-foreground">{modelLoading ? "Loading model..." : currentModelLabel}</p>
+                      {currentModelTimestamp && (
+                        <p className="mt-1 text-[11px] text-muted-foreground">Uploaded {currentModelTimestamp}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Upload New Model</label>
+                  <div
+                    className={`rounded-2xl border-2 border-dashed p-6 text-center transition-colors ${
+                      modelFile ? "border-accent bg-accent/10" : "border-border hover:border-muted-foreground"
+                    }`}
+                  >
+                    <input
+                      type="file"
+                      accept=".pt"
+                      onChange={(e) => setModelFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                      id="model-upload"
+                    />
+                    <label htmlFor="model-upload" className="cursor-pointer">
+                      <Upload className={`mx-auto mb-2 h-8 w-8 ${modelFile ? "text-accent" : "text-muted-foreground"}`} />
+                      {modelFile ? (
+                        <p className="text-sm font-medium text-accent">{modelFile.name}</p>
+                      ) : (
+                        <>
+                          <p className="text-sm text-foreground">Click to upload .pt file</p>
+                          <p className="mt-1 text-xs text-muted-foreground">PyTorch model weights</p>
+                        </>
+                      )}
+                    </label>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleModelUpload}
+                  disabled={!modelFile || modelUploading}
+                  className="w-full rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {modelUploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Uploading Model...
+                    </>
+                  ) : (
+                    "Update Model"
+                  )}
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onSelect={handleOpenAddLocation}>
-                  <Plus className="h-4 w-4" />
-                  Add Location
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger disabled={locations.length === 0}>
-                    <Pencil className="h-4 w-4" />
-                    Edit Location
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    {locations.length > 0 ? (
-                      locations.map((location) => (
-                        <DropdownMenuItem key={`edit-${location.id}`} onSelect={() => handleOpenEditLocation(location)}>
-                          {location.name}
-                        </DropdownMenuItem>
-                      ))
-                    ) : (
-                      <DropdownMenuItem disabled>No locations available</DropdownMenuItem>
-                    )}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-                <DropdownMenuSeparator />
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger disabled={locations.length === 0}>
-                    <Trash2 className="h-4 w-4" />
-                    Delete Location
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent>
-                    {locations.length > 0 ? (
-                      locations.map((location) => (
-                        <DropdownMenuItem
-                          key={`delete-${location.id}`}
-                          variant="destructive"
-                          onSelect={() => handleOpenDeleteLocation(location)}
-                        >
-                          {location.name}
-                        </DropdownMenuItem>
-                      ))
-                    ) : (
-                      <DropdownMenuItem disabled>No locations available</DropdownMenuItem>
-                    )}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </div>
+            </DialogContent>
+          </Dialog>
 
-            <Button
-              variant="outline"
-              className="rounded-2xl"
-              onClick={() => router.push("/pedestrian/dashboard")}
-            >
-              Open Dashboard
-            </Button>
+          <Button
+            variant="outline"
+            className="rounded-2xl border-border px-4 text-foreground hover:bg-secondary"
+            onClick={() => {
+              void loadDashboard()
+              void loadModelInfo()
+              void loadFootageDates()
+            }}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${dashboardLoading || modelLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
 
-            {/* Add Video Button */}
-            <Button
-              className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-2xl px-4 shadow-elevated-sm"
-              onClick={() => handleOpenAddVideo()}
-            >
-              <Video className="w-4 h-4 mr-2" />
-              Add Video
-            </Button>
+          <Button
+            className="rounded-2xl bg-accent px-4 text-accent-foreground shadow-elevated-sm hover:bg-accent/90"
+            onClick={() => {
+              void handleExportReport()
+            }}
+            disabled={reportExporting}
+          >
+            {reportExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            {reportExporting ? "Exporting..." : "Export Report"}
+          </Button>
+        </div>
+      </header>
+
+      <div className="flex-1 space-y-6 overflow-auto p-6">
+        {bannerError && (
+          <div className="flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{bannerError}</span>
           </div>
-        </header>
+        )}
 
-        {/* Video Grid */}
-        <div className="flex-1 overflow-auto p-6">
-          {activeError && (
-            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{activeError}</span>
-            </div>
-          )}
+        <KPICards summary={summary} loading={dashboardLoading} />
 
-          {selectedDate && !hasAnyVideosForSelectedDate && filteredLocations.length > 0 && (
-            <div className="mb-4 flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-foreground">
-              <Calendar className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <div>
-                <p className="font-medium">No footage is scheduled for this date yet.</p>
-                <p className="mt-1 text-muted-foreground">You can still use any placeholder card below to upload a new recording directly into the correct location.</p>
-              </div>
-            </div>
-          )}
-
-          {locationsLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
-              <Loader2 className="mb-4 h-8 w-8 animate-spin" />
-              <p className="text-sm">Loading locations and videos...</p>
-            </div>
-          ) : filteredLocations.length > 0 ? (
-            <VideoGrid
-              locations={filteredLocations}
-              detectionMode={detectionMode}
-              onAddVideoClick={handleOpenAddVideo}
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[65%_35%]">
+          <div className="space-y-6">
+            <PedestrianChart
+              title="Estimated Unique Tracked Pedestrians (Per location)"
+              description="Estimated cumulative unique tracked pedestrian count for each location over the selected timeline."
+              timeRange={timeRange}
+              selectedDate={selectedDate}
+              data={traffic?.series ?? []}
+              metricKey="cumulativeUniquePedestrians"
+              metricLabel="Unique Pedestrians"
+              seriesColor="#22C55E"
+              locationTotals={traffic?.locationTotals ?? []}
+              bucketMinutes={traffic?.bucketMinutes ?? 60}
+              zoomLevel={traffic?.zoomLevel ?? 0}
+              canZoomIn={traffic?.canZoomIn ?? false}
+              focusTime={traffic?.focusTime}
+              windowStart={traffic?.windowStart}
+              windowEnd={traffic?.windowEnd}
+              loading={dashboardLoading}
+              onTimeSelect={handleAnalyticsZoom}
+              onResetZoom={handleResetZoom}
             />
-          ) : (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="w-16 h-16 rounded-3xl bg-secondary flex items-center justify-center mb-4">
-                <Video className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-medium text-foreground mb-2">No videos found</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                {selectedDate 
-                  ? `No videos available for ${new Date(selectedDate).toLocaleDateString()}`
-                  : "Add a video to get started"
-                }
-              </p>
-              {selectedDate && (
-                <Button variant="outline" onClick={() => setSelectedDate("")} className="rounded-2xl">
-                  Clear date filter
-                </Button>
-              )}
-            </div>
-          )}
+            <PedestrianChart
+              title="Average Visible Pedestrians"
+              description="Average number of pedestrians visible within each bucket, useful for spotting crowding changes."
+              timeRange={timeRange}
+              selectedDate={selectedDate}
+              data={traffic?.series ?? []}
+              metricKey="averageVisiblePedestrians"
+              metricLabel="Average Visible"
+              seriesColor="#06B6D4"
+              bucketMinutes={traffic?.bucketMinutes ?? 60}
+              zoomLevel={traffic?.zoomLevel ?? 0}
+              canZoomIn={traffic?.canZoomIn ?? false}
+              focusTime={traffic?.focusTime}
+              windowStart={traffic?.windowStart}
+              windowEnd={traffic?.windowEnd}
+              loading={dashboardLoading}
+              onTimeSelect={handleAnalyticsZoom}
+              onResetZoom={handleResetZoom}
+            />
+            <OcclusionTrendsChart
+              timeRange={timeRange}
+              selectedDate={selectedDate}
+              data={occlusionTrends?.series ?? []}
+              bucketMinutes={occlusionTrends?.bucketMinutes ?? 60}
+              zoomLevel={occlusionTrends?.zoomLevel ?? 0}
+              canZoomIn={occlusionTrends?.canZoomIn ?? false}
+              focusTime={occlusionTrends?.focusTime}
+              windowStart={occlusionTrends?.windowStart}
+              windowEnd={occlusionTrends?.windowEnd}
+              loading={dashboardLoading}
+              onTimeSelect={handleAnalyticsZoom}
+              onResetZoom={handleResetZoom}
+            />
+          </div>
+          <OcclusionMap hourFilter={hourFilter} onHourFilterChange={setHourFilter} data={occlusion} loading={dashboardLoading} />
         </div>
+
+        <AISynthesis selectedDate={selectedDate} timeRange={timeRange} data={synthesis} loading={dashboardLoading} />
       </div>
-
-      {/* Right Sidebar */}
-      <aside className="w-80 border-l border-border bg-card/30 flex flex-col h-full">
-        <AISearchBar />
-        {/* Location Map - Below Search Bar */}
-        <div className="px-4 pb-4">
-          <LocationMap locations={filteredLocations} />
-        </div>
-        <EventFeed events={events} loading={eventsLoading} />
-      </aside>
-
-      {/* Modals */}
-      <AddLocationModal 
-        open={locationModalOpen} 
-        onOpenChange={handleLocationModalChange}
-        initialData={editingLocation}
-        onSubmitLocation={handleSaveLocation}
-      />
-      <AddVideoModal 
-        open={videoModalOpen}
-        onOpenChange={handleVideoModalChange}
-        locations={locations.map((location) => ({ id: location.id, name: location.name }))}
-        initialLocationId={selectedUploadLocationId}
-        onAddVideo={handleAddVideo}
-      />
-      <AlertDialog open={Boolean(pendingDeleteLocation)} onOpenChange={(open) => !open && setPendingDeleteLocation(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete {pendingDeleteLocation?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will remove the location, all linked footage, generated processed videos, and related detection events.
-              This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeletingLocation}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={isDeletingLocation}
-              onClick={(event) => {
-                event.preventDefault()
-                void handleDeleteSelectedLocation()
-              }}
-            >
-              {isDeletingLocation ? "Deleting..." : "Delete Location"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

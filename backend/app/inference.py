@@ -74,9 +74,14 @@ def resolve_model_path(model_name: Optional[str]) -> Optional[Path]:
     if not model_name:
         return None
 
-    candidate = store.MODELS_DIR / Path(model_name).name
-    if candidate.exists():
-        return candidate
+    name = Path(model_name).name
+    for candidate in (
+        store.MODELS_DIR / name,
+        store.MODELS_DIR / "vehicle" / name,
+        store.MODELS_DIR / "pedestrian" / name,
+    ):
+        if candidate.exists():
+            return candidate
     return None
 
 
