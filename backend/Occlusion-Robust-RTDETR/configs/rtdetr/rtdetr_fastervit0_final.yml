@@ -1,0 +1,20 @@
+__include__: [
+  '../dataset/final_dataset.yml',
+  '../runtime.yml',
+  './include/dataloader.yml',
+  './include/optimizer.yml',
+  './include/rtdetr_fastervit.yml',
+]
+
+output_dir: ./output/rtdetr_fastervit0_final
+checkpoint_step: 5
+
+FasterViTBackbone:
+  variant: fastervit-0
+  pretrained: True
+  model_path: ./weights/fastervit/fastervit_0_224_1k.pth.tar
+
+HybridEncoder:
+  in_channels: [128, 256, 512]
+
+epoches: 72

@@ -1,0 +1,10 @@
+{
+  "lines": [
+    {
+      "name": "gate2",
+      "start": [1550, 1100],
+      "end": [1650, 100],
+      "trigger_anchors": ["CENTER"]
+    }
+  ]
+}

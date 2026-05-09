@@ -91,7 +91,7 @@ class VideoDetailRecord(VideoRecord):
 
 class EventRecord(BaseModel):
     id: str
-    type: Literal["detection", "alert", "motion"]
+    type: Literal["detection", "alert", "motion", "vehicle-detection", "vehicle-track"]
     location: str
     timestamp: str
     description: str
@@ -100,6 +100,8 @@ class EventRecord(BaseModel):
     frame: Optional[int] = None
     offsetSeconds: Optional[float] = None
     occlusionClass: Optional[int] = None
+    vehicleClass: Optional[str] = None
+    gateName: Optional[str] = None
 
 
 class DashboardSummary(BaseModel):
@@ -233,6 +235,124 @@ class SearchResult(BaseModel):
 class ModelInfo(BaseModel):
     currentModel: Optional[str] = None
     uploadedAt: Optional[str] = None
+
+
+ModelDomain = Literal["pedestrian", "vehicle"]
+
+
+class ModelWeightInfo(BaseModel):
+    id: str
+    domain: ModelDomain
+    filename: str
+    relativePath: str
+    absolutePath: str
+    exists: bool
+    sizeBytes: Optional[int] = None
+    label: Optional[str] = None
+    uploadedAt: Optional[str] = None
+    isSeed: bool = False
+
+
+class ModelDomainInfo(BaseModel):
+    domain: ModelDomain
+    framework: str
+    ultralyticsTag: str
+    fallbackUltralyticsTag: str
+    detectionClasses: list[str] = Field(default_factory=list)
+    activeWeightId: Optional[str] = None
+    active: Optional[ModelWeightInfo] = None
+    weights: list[ModelWeightInfo] = Field(default_factory=list)
+
+
+class ModelRegistryResponse(BaseModel):
+    domains: list[ModelDomainInfo]
+    updatedAt: Optional[str] = None
+
+
+class ModelSettingsUpdate(BaseModel):
+    domain: ModelDomain
+    weightId: str
+
+
+VehicleFlowGroup = Literal["In", "Out"]
+VehicleLOS = Literal["A", "B", "C", "D", "E", "F"]
+
+
+class VehicleDetectionLine(BaseModel):
+    name: str
+    start: list[int] = Field(default_factory=list)
+    end: list[int] = Field(default_factory=list)
+    triggerAnchors: list[str] = Field(default_factory=list)
+
+
+class VehicleGate(BaseModel):
+    id: str
+    name: str
+    normalizedName: str
+    latitude: float
+    longitude: float
+    flowGroup: VehicleFlowGroup
+    countingConfig: str
+    countingConfigPath: str
+    countingConfigExists: bool
+    defaultRoadLengthKm: Optional[float] = None
+    defaultLaneCount: Optional[int] = None
+    detectionLine: Optional[VehicleDetectionLine] = None
+
+
+class VehicleGateLOS(BaseModel):
+    gateId: str
+    gateName: str
+    flowGroup: VehicleFlowGroup
+    latitude: float
+    longitude: float
+    vehicleCount: int = 0
+    volume: float = 0.0
+    capacity: float = 0.0
+    vcRatio: Optional[float] = None
+    los: Optional[VehicleLOS] = None
+    losRank: int = 0
+    losDescription: Optional[str] = None
+
+
+class VehicleClassBreakdown(BaseModel):
+    className: str
+    label: Optional[str] = None
+    count: int = 0
+    share: float = 0.0
+    pceMultiplier: float = 1.0
+
+
+class VehicleSummary(BaseModel):
+    date: Optional[str] = None
+    totalVehicles: int = 0
+    totalGates: int = 0
+    averageVcRatio: Optional[float] = None
+    dominantLos: Optional[VehicleLOS] = None
+    perGateLos: list[VehicleGateLOS] = Field(default_factory=list)
+
+
+class VehicleTrafficResponse(BaseModel):
+    timeRange: str
+    bucketMinutes: int
+    series: list[dict[str, object]] = Field(default_factory=list)
+
+
+class CountingConfigList(BaseModel):
+    options: list[str] = Field(default_factory=list)
+    defaultConfig: Optional[str] = None
+
+
+class InferConfigList(BaseModel):
+    options: list[str] = Field(default_factory=list)
+    defaultConfig: Optional[str] = None
+
+
+class InferenceRequirementUploadResult(BaseModel):
+    requirementType: Literal["infer-config", "annotations", "counting-config"]
+    filename: str
+    savedPath: str
+    message: str
 
 
 class InferenceStatus(BaseModel):

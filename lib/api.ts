@@ -237,7 +237,7 @@ export interface VideoSeveritySummary {
 
 export interface EventRecord {
   id: string
-  type: "detection" | "alert" | "motion"
+  type: "detection" | "alert" | "motion" | "vehicle-detection" | "vehicle-track"
   location: string
   timestamp: string
   description: string
@@ -246,6 +246,8 @@ export interface EventRecord {
   frame?: number | null
   offsetSeconds?: number | null
   occlusionClass?: number | null
+  vehicleClass?: string | null
+  gateName?: string | null
 }
 
 export interface DashboardSummary {
@@ -392,6 +394,115 @@ export interface SearchResult {
 export interface ModelInfo {
   currentModel?: string | null
   uploadedAt?: string | null
+}
+
+export type ModelDomain = "pedestrian" | "vehicle"
+
+export interface ModelWeightInfo {
+  id: string
+  domain: ModelDomain
+  filename: string
+  relativePath: string
+  absolutePath: string
+  exists: boolean
+  sizeBytes?: number | null
+  label?: string | null
+  uploadedAt?: string | null
+  isSeed: boolean
+}
+
+export interface ModelDomainInfo {
+  domain: ModelDomain
+  framework: string
+  ultralyticsTag: string
+  fallbackUltralyticsTag: string
+  detectionClasses: string[]
+  activeWeightId?: string | null
+  active?: ModelWeightInfo | null
+  weights: ModelWeightInfo[]
+}
+
+export interface ModelRegistryResponse {
+  domains: ModelDomainInfo[]
+  updatedAt?: string | null
+}
+
+export interface ModelSettingsUpdate {
+  domain: ModelDomain
+  weightId: string
+}
+
+export type VehicleFlowGroup = "In" | "Out"
+export type VehicleLOS = "A" | "B" | "C" | "D" | "E" | "F"
+
+export interface VehicleDetectionLine {
+  name: string
+  start: [number, number]
+  end: [number, number]
+  triggerAnchors: string[]
+}
+
+export interface VehicleGate {
+  id: string
+  name: string
+  normalizedName: string
+  latitude: number
+  longitude: number
+  flowGroup: VehicleFlowGroup
+  countingConfig: string
+  countingConfigPath: string
+  countingConfigExists: boolean
+  defaultRoadLengthKm?: number | null
+  defaultLaneCount?: number | null
+  detectionLine?: VehicleDetectionLine | null
+}
+
+export interface VehicleGateLOS {
+  gateId: string
+  gateName: string
+  flowGroup: VehicleFlowGroup
+  latitude: number
+  longitude: number
+  vehicleCount: number
+  volume: number
+  capacity: number
+  vcRatio: number | null
+  los: VehicleLOS | null
+  losRank: number
+  losDescription: string | null
+}
+
+export interface VehicleClassBreakdown {
+  className: string
+  label: string | null
+  count: number
+  share: number
+  pceMultiplier: number
+}
+
+export interface VehicleSummary {
+  date: string | null
+  totalVehicles: number
+  totalGates: number
+  averageVcRatio: number | null
+  dominantLos: VehicleLOS | null
+  perGateLos: VehicleGateLOS[]
+}
+
+export interface VehicleTrafficResponse {
+  timeRange: string
+  bucketMinutes: number
+  series: ({ id: string; time: string } & Record<string, string | number | null>)[]
+}
+
+export interface CountingConfigList {
+  options: string[]
+  defaultConfig: string | null
+}
+
+export interface InferConfigList {
+  options: string[]
+  defaultConfig: string | null
 }
 
 export interface DownloadedReport {
@@ -724,6 +835,89 @@ export function uploadModel(file: File) {
     method: "POST",
     body: formData,
   })
+}
+
+export function getModelRegistry() {
+  return request<ModelRegistryResponse>("/api/models")
+}
+
+export function getModelDomain(domain: ModelDomain) {
+  return request<ModelDomainInfo>(`/api/models/${domain}`)
+}
+
+export function updateModelSettings(payload: ModelSettingsUpdate) {
+  return request<ModelDomainInfo>("/api/models/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function uploadDomainModel(
+  domain: ModelDomain,
+  file: File,
+  options: { label?: string; setActive?: boolean } = {},
+) {
+  const formData = new FormData()
+  formData.set("file", file)
+  if (options.label) {
+    formData.set("label", options.label)
+  }
+  formData.set("setActive", options.setActive === false ? "false" : "true")
+  return request<ModelDomainInfo>(`/api/models/${domain}/upload`, {
+    method: "POST",
+    body: formData,
+  })
+}
+
+export function deleteDomainWeight(domain: ModelDomain, weightId: string) {
+  return request<ModelDomainInfo>(`/api/models/${domain}/weights/${encodeURIComponent(weightId)}`, {
+    method: "DELETE",
+  })
+}
+
+// --- Vehicle endpoints ---
+
+export function getVehicleGates() {
+  return request<VehicleGate[]>("/api/vehicle/gates")
+}
+
+export function getVehicleSummary(date?: string) {
+  return request<VehicleSummary>(withQuery("/api/vehicle/dashboard/summary", { date }))
+}
+
+export function getVehicleLOS(date?: string) {
+  return request<VehicleGateLOS[]>(withQuery("/api/vehicle/dashboard/los", { date }))
+}
+
+export function getVehicleClassBreakdown(date?: string) {
+  return request<VehicleClassBreakdown[]>(
+    withQuery("/api/vehicle/dashboard/class-breakdown", { date }),
+  )
+}
+
+export function getVehicleTraffic(date?: string, timeRange = "whole-day", bucketMinutes = 60) {
+  return request<VehicleTrafficResponse>(
+    withQuery("/api/vehicle/dashboard/traffic", {
+      date,
+      timeRange,
+      bucketMinutes: String(bucketMinutes),
+    }),
+  )
+}
+
+export function getVehicleEvents(date?: string, gateId?: string) {
+  return request<EventRecord[]>(withQuery("/api/vehicle/events", { date, gateId }))
+}
+
+// --- Inference requirement configs ---
+
+export function getCountingConfigs() {
+  return request<CountingConfigList>("/api/inference/requirements/counting-configs")
+}
+
+export function getInferConfigs() {
+  return request<InferConfigList>("/api/inference/requirements/infer-configs")
 }
 
 export async function downloadDashboardReport(date: string, timeRange: string): Promise<DownloadedReport> {
