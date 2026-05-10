@@ -20,6 +20,12 @@ node_modules/
 .DS_Store
 .vercel
 
+# PyTorch model files
+*.pt
+*.pt*
+*.pth
+*.pth*
+
 # Local backend runtime data
 backend/storage/dev_data.json
 backend/storage/models/*
