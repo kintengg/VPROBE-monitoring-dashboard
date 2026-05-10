@@ -1,49 +1,7 @@
 [
   {
-    "eventId": "7777b00c",
-    "videoId": "3ca79f7d",
-    "type": "detection",
-    "location": "EDSA Sec Walk",
-    "clockTime": "10:00:00 AM",
-    "offsetSeconds": 0.0,
-    "videoTime": "00:00:00",
-    "pedestrianId": 2,
-    "frame": 1,
-    "occlusionClass": 0,
-    "occlusionLabel": "light occlusion",
-    "description": "Light occlusion pedestrian ID #2 detected at frame 1"
-  },
-  {
-    "eventId": "a5d882f4",
-    "videoId": "3ca79f7d",
-    "type": "detection",
-    "location": "EDSA Sec Walk",
-    "clockTime": "10:00:00 AM",
-    "offsetSeconds": 0.0,
-    "videoTime": "00:00:00",
-    "pedestrianId": 4,
-    "frame": 1,
-    "occlusionClass": 0,
-    "occlusionLabel": "light occlusion",
-    "description": "Light occlusion pedestrian ID #4 detected at frame 1"
-  },
-  {
-    "eventId": "df658d94",
-    "videoId": "3ca79f7d",
-    "type": "detection",
-    "location": "EDSA Sec Walk",
-    "clockTime": "10:00:00 AM",
-    "offsetSeconds": 0.0,
-    "videoTime": "00:00:00",
-    "pedestrianId": 3,
-    "frame": 1,
-    "occlusionClass": 0,
-    "occlusionLabel": "light occlusion",
-    "description": "Light occlusion pedestrian ID #3 detected at frame 1"
-  },
-  {
-    "eventId": "ea436c0c",
-    "videoId": "3ca79f7d",
+    "eventId": "4792fb95",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:00 AM",
@@ -56,8 +14,8 @@
     "description": "Light occlusion pedestrian ID #1 detected at frame 1"
   },
   {
-    "eventId": "f2113fe8",
-    "videoId": "3ca79f7d",
+    "eventId": "487c2abb",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:00 AM",
@@ -70,8 +28,50 @@
     "description": "Light occlusion pedestrian ID #5 detected at frame 1"
   },
   {
-    "eventId": "435d31af",
-    "videoId": "3ca79f7d",
+    "eventId": "59680fdf",
+    "videoId": "73c1ecaf",
+    "type": "detection",
+    "location": "EDSA Sec Walk",
+    "clockTime": "10:00:00 AM",
+    "offsetSeconds": 0.0,
+    "videoTime": "00:00:00",
+    "pedestrianId": 4,
+    "frame": 1,
+    "occlusionClass": 0,
+    "occlusionLabel": "light occlusion",
+    "description": "Light occlusion pedestrian ID #4 detected at frame 1"
+  },
+  {
+    "eventId": "5ff6c866",
+    "videoId": "73c1ecaf",
+    "type": "detection",
+    "location": "EDSA Sec Walk",
+    "clockTime": "10:00:00 AM",
+    "offsetSeconds": 0.0,
+    "videoTime": "00:00:00",
+    "pedestrianId": 3,
+    "frame": 1,
+    "occlusionClass": 0,
+    "occlusionLabel": "light occlusion",
+    "description": "Light occlusion pedestrian ID #3 detected at frame 1"
+  },
+  {
+    "eventId": "da45378e",
+    "videoId": "73c1ecaf",
+    "type": "detection",
+    "location": "EDSA Sec Walk",
+    "clockTime": "10:00:00 AM",
+    "offsetSeconds": 0.0,
+    "videoTime": "00:00:00",
+    "pedestrianId": 2,
+    "frame": 1,
+    "occlusionClass": 0,
+    "occlusionLabel": "light occlusion",
+    "description": "Light occlusion pedestrian ID #2 detected at frame 1"
+  },
+  {
+    "eventId": "c86a299c",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:00 AM",
@@ -84,8 +84,8 @@
     "description": "Light occlusion pedestrian ID #6 detected at frame 17"
   },
   {
-    "eventId": "655f56f8",
-    "videoId": "3ca79f7d",
+    "eventId": "f4e2710f",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:01 AM",
@@ -98,8 +98,8 @@
     "description": "Light occlusion pedestrian ID #11 detected at frame 34"
   },
   {
-    "eventId": "7f7c34aa",
-    "videoId": "3ca79f7d",
+    "eventId": "8587e3e4",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:02 AM",
@@ -112,8 +112,8 @@
     "description": "Light occlusion pedestrian ID #18 detected at frame 71"
   },
   {
-    "eventId": "58dde34b",
-    "videoId": "3ca79f7d",
+    "eventId": "4048b763",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:03 AM",
@@ -126,8 +126,8 @@
     "description": "Light occlusion pedestrian ID #28 detected at frame 113"
   },
   {
-    "eventId": "9f1b348a",
-    "videoId": "3ca79f7d",
+    "eventId": "b7a55da6",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:04 AM",
@@ -140,8 +140,8 @@
     "description": "Moderate occlusion pedestrian ID #39 detected at frame 138"
   },
   {
-    "eventId": "3cd4d2d8",
-    "videoId": "3ca79f7d",
+    "eventId": "3d2222a3",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:04 AM",
@@ -154,8 +154,8 @@
     "description": "Light occlusion pedestrian ID #40 detected at frame 146"
   },
   {
-    "eventId": "e61827d4",
-    "videoId": "3ca79f7d",
+    "eventId": "f2bcc080",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:06 AM",
@@ -168,8 +168,8 @@
     "description": "Light occlusion pedestrian ID #46 detected at frame 185"
   },
   {
-    "eventId": "a6f13d2e",
-    "videoId": "3ca79f7d",
+    "eventId": "935183de",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:06 AM",
@@ -182,8 +182,8 @@
     "description": "Light occlusion pedestrian ID #47 detected at frame 203"
   },
   {
-    "eventId": "3517eeee",
-    "videoId": "3ca79f7d",
+    "eventId": "dac1018d",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:07 AM",
@@ -196,8 +196,8 @@
     "description": "Light occlusion pedestrian ID #48 detected at frame 215"
   },
   {
-    "eventId": "0b2e23a4",
-    "videoId": "3ca79f7d",
+    "eventId": "3db95042",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:07 AM",
@@ -210,8 +210,8 @@
     "description": "Light occlusion pedestrian ID #49 detected at frame 227"
   },
   {
-    "eventId": "0b15f157",
-    "videoId": "3ca79f7d",
+    "eventId": "a802f1bb",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:07 AM",
@@ -224,8 +224,8 @@
     "description": "Light occlusion pedestrian ID #59 detected at frame 239"
   },
   {
-    "eventId": "0be6572f",
-    "videoId": "3ca79f7d",
+    "eventId": "951b7c20",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:08 AM",
@@ -238,8 +238,8 @@
     "description": "Light occlusion pedestrian ID #65 detected at frame 262"
   },
   {
-    "eventId": "60988d00",
-    "videoId": "3ca79f7d",
+    "eventId": "fba45776",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:08 AM",
@@ -252,8 +252,8 @@
     "description": "Light occlusion pedestrian ID #69 detected at frame 269"
   },
   {
-    "eventId": "d1fec2e9",
-    "videoId": "3ca79f7d",
+    "eventId": "b3c391d7",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:15 AM",
@@ -266,8 +266,8 @@
     "description": "Light occlusion pedestrian ID #94 detected at frame 452"
   },
   {
-    "eventId": "50523524",
-    "videoId": "3ca79f7d",
+    "eventId": "ac1bc827",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:15 AM",
@@ -280,8 +280,8 @@
     "description": "Light occlusion pedestrian ID #98 detected at frame 455"
   },
   {
-    "eventId": "cb131339",
-    "videoId": "3ca79f7d",
+    "eventId": "d40210c9",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:16 AM",
@@ -294,8 +294,8 @@
     "description": "Light occlusion pedestrian ID #99 detected at frame 485"
   },
   {
-    "eventId": "6ee4f994",
-    "videoId": "3ca79f7d",
+    "eventId": "e28e40c2",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:17 AM",
@@ -308,8 +308,8 @@
     "description": "Light occlusion pedestrian ID #131 detected at frame 533"
   },
   {
-    "eventId": "79dc4f2e",
-    "videoId": "3ca79f7d",
+    "eventId": "8bb28af6",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:18 AM",
@@ -322,8 +322,8 @@
     "description": "Light occlusion pedestrian ID #133 detected at frame 542"
   },
   {
-    "eventId": "e75e115f",
-    "videoId": "3ca79f7d",
+    "eventId": "ab8fd8c8",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:19 AM",
@@ -336,8 +336,8 @@
     "description": "Light occlusion pedestrian ID #155 detected at frame 585"
   },
   {
-    "eventId": "dc7f7d3c",
-    "videoId": "3ca79f7d",
+    "eventId": "1715ea16",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:22 AM",
@@ -350,22 +350,8 @@
     "description": "Moderate occlusion pedestrian ID #156 detected at frame 671"
   },
   {
-    "eventId": "b8070b6b",
-    "videoId": "3ca79f7d",
-    "type": "detection",
-    "location": "EDSA Sec Walk",
-    "clockTime": "10:00:23 AM",
-    "offsetSeconds": 23.93,
-    "videoTime": "00:00:23",
-    "pedestrianId": 168,
-    "frame": 719,
-    "occlusionClass": 0,
-    "occlusionLabel": "light occlusion",
-    "description": "Light occlusion pedestrian ID #168 detected at frame 719"
-  },
-  {
-    "eventId": "f9f25234",
-    "videoId": "3ca79f7d",
+    "eventId": "8fa26e41",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:23 AM",
@@ -378,8 +364,22 @@
     "description": "Light occlusion pedestrian ID #167 detected at frame 719"
   },
   {
-    "eventId": "1a0fc945",
-    "videoId": "3ca79f7d",
+    "eventId": "ea423753",
+    "videoId": "73c1ecaf",
+    "type": "detection",
+    "location": "EDSA Sec Walk",
+    "clockTime": "10:00:23 AM",
+    "offsetSeconds": 23.93,
+    "videoTime": "00:00:23",
+    "pedestrianId": 168,
+    "frame": 719,
+    "occlusionClass": 0,
+    "occlusionLabel": "light occlusion",
+    "description": "Light occlusion pedestrian ID #168 detected at frame 719"
+  },
+  {
+    "eventId": "18a07f1b",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:25 AM",
@@ -392,8 +392,8 @@
     "description": "Moderate occlusion pedestrian ID #171 detected at frame 776"
   },
   {
-    "eventId": "ad0e3d72",
-    "videoId": "3ca79f7d",
+    "eventId": "2d0b7141",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:26 AM",
@@ -406,8 +406,8 @@
     "description": "Moderate occlusion pedestrian ID #173 detected at frame 803"
   },
   {
-    "eventId": "7d8faf88",
-    "videoId": "3ca79f7d",
+    "eventId": "7c768705",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:27 AM",
@@ -420,8 +420,8 @@
     "description": "Light occlusion pedestrian ID #175 detected at frame 816"
   },
   {
-    "eventId": "fd8c4613",
-    "videoId": "3ca79f7d",
+    "eventId": "ad9169cf",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:27 AM",
@@ -434,8 +434,8 @@
     "description": "Moderate occlusion pedestrian ID #176 detected at frame 822"
   },
   {
-    "eventId": "351f00e5",
-    "videoId": "3ca79f7d",
+    "eventId": "b9c4a307",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:27 AM",
@@ -448,8 +448,8 @@
     "description": "Moderate occlusion pedestrian ID #177 detected at frame 827"
   },
   {
-    "eventId": "7492740f",
-    "videoId": "3ca79f7d",
+    "eventId": "b4797569",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:29 AM",
@@ -462,8 +462,8 @@
     "description": "Moderate occlusion pedestrian ID #179 detected at frame 876"
   },
   {
-    "eventId": "cf9fbf8a",
-    "videoId": "3ca79f7d",
+    "eventId": "856900da",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:32 AM",
@@ -476,8 +476,8 @@
     "description": "Moderate occlusion pedestrian ID #180 detected at frame 978"
   },
   {
-    "eventId": "c32dfe9f",
-    "videoId": "3ca79f7d",
+    "eventId": "5fe05954",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:32 AM",
@@ -490,8 +490,8 @@
     "description": "Light occlusion pedestrian ID #184 detected at frame 990"
   },
   {
-    "eventId": "38737336",
-    "videoId": "3ca79f7d",
+    "eventId": "a351d256",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:33 AM",
@@ -504,8 +504,8 @@
     "description": "Moderate occlusion pedestrian ID #185 detected at frame 992"
   },
   {
-    "eventId": "8f648da7",
-    "videoId": "3ca79f7d",
+    "eventId": "d1a3df80",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:33 AM",
@@ -518,8 +518,8 @@
     "description": "Light occlusion pedestrian ID #187 detected at frame 999"
   },
   {
-    "eventId": "b6ec34a9",
-    "videoId": "3ca79f7d",
+    "eventId": "686c4e0b",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:33 AM",
@@ -532,8 +532,8 @@
     "description": "Moderate occlusion pedestrian ID #189 detected at frame 1002"
   },
   {
-    "eventId": "bc136fce",
-    "videoId": "3ca79f7d",
+    "eventId": "d6559bd2",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:33 AM",
@@ -546,8 +546,8 @@
     "description": "Heavy occlusion pedestrian ID #190 detected at frame 1002"
   },
   {
-    "eventId": "13bd3556",
-    "videoId": "3ca79f7d",
+    "eventId": "b15e4da7",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:36 AM",
@@ -560,8 +560,8 @@
     "description": "Light occlusion pedestrian ID #191 detected at frame 1082"
   },
   {
-    "eventId": "1ec42d2b",
-    "videoId": "3ca79f7d",
+    "eventId": "4eac21b1",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:36 AM",
@@ -574,8 +574,8 @@
     "description": "Light occlusion pedestrian ID #192 detected at frame 1091"
   },
   {
-    "eventId": "53aee135",
-    "videoId": "3ca79f7d",
+    "eventId": "b316b5fa",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:36 AM",
@@ -588,8 +588,8 @@
     "description": "Light occlusion pedestrian ID #194 detected at frame 1092"
   },
   {
-    "eventId": "5b882b02",
-    "videoId": "3ca79f7d",
+    "eventId": "b6f4085f",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:37 AM",
@@ -602,8 +602,8 @@
     "description": "Light occlusion pedestrian ID #198 detected at frame 1115"
   },
   {
-    "eventId": "d165a263",
-    "videoId": "3ca79f7d",
+    "eventId": "f8eda193",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:37 AM",
@@ -616,8 +616,8 @@
     "description": "Light occlusion pedestrian ID #201 detected at frame 1118"
   },
   {
-    "eventId": "a99af71f",
-    "videoId": "3ca79f7d",
+    "eventId": "013febb0",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:37 AM",
@@ -630,8 +630,8 @@
     "description": "Light occlusion pedestrian ID #208 detected at frame 1127"
   },
   {
-    "eventId": "de8d727f",
-    "videoId": "3ca79f7d",
+    "eventId": "7aad32f2",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:45 AM",
@@ -644,8 +644,8 @@
     "description": "Light occlusion pedestrian ID #214 detected at frame 1379"
   },
   {
-    "eventId": "08f66df3",
-    "videoId": "3ca79f7d",
+    "eventId": "88f7ebf2",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:49 AM",
@@ -658,8 +658,8 @@
     "description": "Moderate occlusion pedestrian ID #218 detected at frame 1478"
   },
   {
-    "eventId": "2e756340",
-    "videoId": "3ca79f7d",
+    "eventId": "32367ac5",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:49 AM",
@@ -672,8 +672,8 @@
     "description": "Moderate occlusion pedestrian ID #219 detected at frame 1487"
   },
   {
-    "eventId": "286b2628",
-    "videoId": "3ca79f7d",
+    "eventId": "a89de0c8",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:49 AM",
@@ -686,8 +686,8 @@
     "description": "Light occlusion pedestrian ID #222 detected at frame 1496"
   },
   {
-    "eventId": "de290320",
-    "videoId": "3ca79f7d",
+    "eventId": "d12c0b1d",
+    "videoId": "73c1ecaf",
     "type": "detection",
     "location": "EDSA Sec Walk",
     "clockTime": "10:00:52 AM",
