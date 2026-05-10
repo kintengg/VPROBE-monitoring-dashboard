@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-05-09T14:38:25Z",
+  "generatedAt": "2026-05-10T05:48:17Z",
   "video": {
-    "id": "66d947df",
+    "id": "3ca79f7d",
     "locationId": "edsa-sec-walk",
     "location": "EDSA Sec Walk",
-    "timestamp": "10:10:00",
-    "date": "2026-05-09",
-    "startTime": "10:10:00",
-    "endTime": "10:10:59",
+    "timestamp": "10:00:00",
+    "date": "2026-05-10",
+    "startTime": "10:00:00",
+    "endTime": "10:00:59",
     "gpsLat": 14.6397,
     "gpsLng": 121.0775,
     "pedestrianCount": 59,
-    "rawPath": "storage/videos/raw/11098cd9-0301.mp4",
-    "processedPath": "storage/videos/processed/66d947df/11098cd9-0301.mp4"
+    "rawPath": "storage/videos/raw/b4cad29a-0301.mp4",
+    "processedPath": "storage/videos/processed/3ca79f7d/b4cad29a-0301.mp4"
   },
   "location": {
     "id": "edsa-sec-walk",
@@ -152,7 +152,8 @@
     "walkableAreaM2": null,
     "domain": null,
     "roadLengthM": null,
-    "laneCount": null
+    "laneCount": null,
+    "flowGroup": null
   },
   "counts": {
     "pedestrianCount": 59,

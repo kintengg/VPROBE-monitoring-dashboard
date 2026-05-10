@@ -333,6 +333,22 @@ def draw_cv2(frame, labels, boxes, scores, threshold=0.6, class_names=None, clas
     
     return frame
 
+def write_detection_rows(writer, frame_count, fps, detections, class_names):
+    """Append one row per tracked detection to the per-frame detection CSV."""
+    if writer is None or detections is None or detections.tracker_id is None:
+        return
+    timestamp = format_video_timestamp(frame_count, fps)
+    for j in range(len(detections)):
+        track_id = detections.tracker_id[j]
+        if track_id is None:
+            continue
+        class_id = int(detections.class_id[j])
+        class_name = class_names.get(class_id, f"class_{class_id}") if class_names else f"class_{class_id}"
+        confidence = float(detections.confidence[j]) if detections.confidence is not None else 0.0
+        x1, y1, x2, y2 = detections.xyxy[j].astype(int).tolist()
+        writer.writerow([timestamp, frame_count, int(track_id), class_id, class_name, f"{confidence:.4f}", x1, y1, x2, y2])
+
+
 def convert_to_supervision_detections(labels, boxes, scores, threshold=0.6, class_id_mapping=None):
     """Convert RT-DETR outputs to supervision Detections format"""
     # Convert tensors to numpy arrays
@@ -744,6 +760,19 @@ def process_video(args):
                     summary_file = open(summary_path, 'w')
                     print(f"Counting summary will be saved to: {summary_path}")
 
+    # Per-frame detection log (one row per (frame, tracked detection)). Used by
+    # downstream consumers to compute "vehicles currently in frame" and
+    # "total unique vehicles detected" — neither of which the line-crossing CSV
+    # alone can answer.
+    detections_csv_writer = None
+    detections_csv_file = None
+    if tracker is not None and args.output:
+        detections_path = str(Path(args.output).with_suffix('')) + '_detections.csv'
+        detections_csv_file = open(detections_path, 'w', newline='')
+        detections_csv_writer = csv.writer(detections_csv_file)
+        detections_csv_writer.writerow(['timestamp', 'frame_number', 'track_id', 'class_id', 'class_name', 'confidence', 'x1', 'y1', 'x2', 'y2'])
+        print(f"Per-frame detection log will be saved to: {detections_path}")
+
     # Initialize traffic congestion estimator if enabled
     congestion_estimator = None
     congestion_csv_writer = None
@@ -870,7 +899,8 @@ def process_video(args):
                         if tracker is not None:
                             detections = convert_to_supervision_detections(labels, boxes, scores, args.threshold, class_id_mapping)
                             detections = tracker.update_with_detections(detections)
-                            
+                            write_detection_rows(detections_csv_writer, frame_count, fps, detections, class_names)
+
                             # Process line crossing detection for counting
                             if line_zones:
                                 import time
@@ -1070,7 +1100,8 @@ def process_video(args):
                         if tracker is not None:
                             detections = convert_to_supervision_detections(labels, boxes, scores, args.threshold, class_id_mapping)
                             detections = tracker.update_with_detections(detections)
-                            
+                            write_detection_rows(detections_csv_writer, frame_count, fps, detections, class_names)
+
                             # Process line crossing detection for counting
                             if line_zones:
                                 import time
@@ -1266,6 +1297,7 @@ def process_video(args):
 
                 # Update tracker
                 detections = tracker.update_with_detections(detections)
+                write_detection_rows(detections_csv_writer, frame_count, fps, detections, class_names)
 
                 # Process line crossing detection for counting
                 if line_zones:
@@ -1495,6 +1527,10 @@ def process_video(args):
     if summary_file is not None:
         summary_file.close()
         print(f"Counting summary saved to TXT file")
+
+    if detections_csv_file is not None:
+        detections_csv_file.close()
+        print(f"Per-frame detection log saved to CSV file")
 
     if line_zones:
         print("\n=== Counting Summary (OUT counts only) ===")

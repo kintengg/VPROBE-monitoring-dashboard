@@ -112,6 +112,8 @@ class EventRecord(BaseModel):
     gateName: Optional[str] = None
     trackId: Optional[int] = None
     direction: Optional[Literal["in", "out"]] = None
+    lastOffsetSeconds: Optional[float] = None
+    lastFrame: Optional[int] = None
 
 
 class DashboardSummary(BaseModel):

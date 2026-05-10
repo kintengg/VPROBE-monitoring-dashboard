@@ -24,6 +24,7 @@ export interface EnqueuedUploadInput {
   startTime: string
   endTime: string
   fastMode: boolean
+  domain?: "pedestrian" | "vehicle"
 }
 
 export interface UploadQueueItem {
@@ -33,6 +34,7 @@ export interface UploadQueueItem {
   fileSize: number
   locationId: string
   locationName: string
+  domain: "pedestrian" | "vehicle"
   date: string
   startTime: string
   endTime: string
@@ -57,9 +59,11 @@ interface UploadQueueContextValue {
   uploads: UploadQueueItem[]
   enqueueUploads: (items: EnqueuedUploadInput[]) => void
   cancelUpload: (queueItemId: string) => Promise<void>
+  clearHistory: () => number
   activeCount: number
   queuedCount: number
   completedCount: number
+  terminalCount: number
   hasActiveUploads: boolean
   settledUploadsVersion: number
   maxConcurrentUploads: number
@@ -139,6 +143,7 @@ function createQueuedItem(input: EnqueuedUploadInput): UploadQueueItem {
     fileSize: input.file.size,
     locationId: input.locationId,
     locationName: input.locationName,
+    domain: input.domain ?? "pedestrian",
     date: input.date,
     startTime: input.startTime,
     endTime: input.endTime,
@@ -173,6 +178,7 @@ function createUploadFromHistory(status: VideoUploadStatus): UploadQueueItem {
     fileSize: 0,
     locationId: status.locationId ?? "",
     locationName: status.locationName ?? "Unknown location",
+    domain: "pedestrian",
     date: status.date ?? "",
     startTime: status.startTime ?? "",
     endTime: status.endTime ?? "",
@@ -276,6 +282,7 @@ function restoreUpload(value: unknown): UploadQueueItem | null {
     fileSize: upload.fileSize,
     locationId: upload.locationId,
     locationName: upload.locationName,
+    domain: upload.domain === "vehicle" ? "vehicle" : "pedestrian",
     date: upload.date,
     startTime: upload.startTime,
     endTime: upload.endTime,
@@ -643,6 +650,21 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
     setUploads((currentUploads) => [...items.map(createQueuedItem), ...currentUploads])
   }, [])
 
+  const clearHistory = useCallback(() => {
+    let removed = 0
+    setUploads((currentUploads) => {
+      const next = currentUploads.filter((upload) => {
+        if (isTerminalState(upload.state)) {
+          removed += 1
+          return false
+        }
+        return true
+      })
+      return next.length === currentUploads.length ? currentUploads : next
+    })
+    return removed
+  }, [])
+
   const cancelUpload = useCallback(
     async (queueItemId: string) => {
       const upload = uploadsRef.current.find((item) => item.id === queueItemId)
@@ -706,6 +728,7 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
 
   const activeUploads = useMemo(() => sortedUploads.filter(isActiveUpload), [sortedUploads])
   const { activeCount, queuedCount, completedCount } = summarizeUploads(sortedUploads)
+  const terminalCount = useMemo(() => sortedUploads.filter((u) => isTerminalState(u.state)).length, [sortedUploads])
   const activeOverlayUpload = activeUploads[0] ?? null
 
   const contextValue = useMemo<UploadQueueContextValue>(
@@ -713,14 +736,16 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
       uploads: sortedUploads,
       enqueueUploads,
       cancelUpload,
+      clearHistory,
       activeCount,
       queuedCount,
       completedCount,
+      terminalCount,
       hasActiveUploads: activeCount > 0,
       settledUploadsVersion,
       maxConcurrentUploads: MAX_CONCURRENT_UPLOADS,
     }),
-    [activeCount, cancelUpload, completedCount, enqueueUploads, queuedCount, settledUploadsVersion, sortedUploads],
+    [activeCount, cancelUpload, clearHistory, completedCount, enqueueUploads, queuedCount, settledUploadsVersion, sortedUploads, terminalCount],
   )
 
   return (
@@ -730,6 +755,7 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
         isVisible={Boolean(activeOverlayUpload) && !overlayDismissed}
         label={activeOverlayUpload?.message ?? "Uploading video..."}
         progress={activeOverlayUpload?.progressPercent ?? null}
+        variant={activeOverlayUpload?.domain === "vehicle" ? "vehicle" : "pedestrian"}
         onClose={() => setOverlayDismissed(true)}
       />
     </UploadQueueContext.Provider>

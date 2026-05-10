@@ -257,6 +257,8 @@ export interface EventRecord {
   gateName?: string | null
   trackId?: number | null
   direction?: "in" | "out" | null
+  lastOffsetSeconds?: number | null
+  lastFrame?: number | null
 }
 
 export interface DashboardSummary {

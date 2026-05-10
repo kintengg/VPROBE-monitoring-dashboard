@@ -1,18 +1,18 @@
 {
-  "generatedAt": "2026-05-09T14:17:38Z",
+  "generatedAt": "2026-05-10T05:44:54Z",
   "video": {
-    "id": "c373e8ed",
+    "id": "73f4aeb2",
     "locationId": "gate-2-9",
     "location": "Gate 2.9",
-    "timestamp": "22:10:00",
-    "date": "2026-05-09",
-    "startTime": "22:10:00",
-    "endTime": "22:12:01",
+    "timestamp": "10:00:00",
+    "date": "2026-05-10",
+    "startTime": "10:00:00",
+    "endTime": "10:02:01",
     "gpsLat": 14.640421,
     "gpsLng": 121.074759,
-    "pedestrianCount": 27,
-    "rawPath": "storage/videos/raw/a5a5516f-6to6_g29---2min.mp4",
-    "processedPath": "storage/videos/processed/c373e8ed/a5a5516f-6to6_g29---2min.mp4"
+    "pedestrianCount": 43,
+    "rawPath": "storage/videos/raw/9152e921-6to6_g29---2min.mp4",
+    "processedPath": "storage/videos/processed/73f4aeb2/9152e921-6to6_g29---2min.mp4"
   },
   "location": {
     "id": "gate-2-9",
@@ -26,11 +26,12 @@
     "walkableAreaM2": null,
     "domain": "vehicle",
     "roadLengthM": 50.0,
-    "laneCount": 2
+    "laneCount": 2,
+    "flowGroup": "Out"
   },
   "counts": {
-    "pedestrianCount": 27,
-    "eventCount": 27,
+    "pedestrianCount": 43,
+    "eventCount": 70,
     "trackCount": 0,
     "trajectorySampleCount": 0,
     "timelineRowCount": 121,

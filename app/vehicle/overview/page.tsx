@@ -251,6 +251,7 @@ export default function VehicleSurveillancePage() {
         {
           ...upload,
           locationName: locations.find((location) => location.id === upload.locationId)?.name ?? "Unknown location",
+          domain: "vehicle",
         },
       ])
     } catch (error) {

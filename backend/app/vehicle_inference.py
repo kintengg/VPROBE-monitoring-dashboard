@@ -120,6 +120,86 @@ def _parse_counts_csv(csv_path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _parse_detections_csv(csv_path: Path) -> list[dict[str, Any]]:
+    if not csv_path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    with csv_path.open("r", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            rows.append(row)
+    return rows
+
+
+def _track_events_from_detections(
+    rows: list[dict[str, Any]],
+    video_id: str,
+    video_record: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Collapse per-frame rows into one `vehicle-track` event per unique track_id.
+
+    Each event carries the track's first-seen / last-seen offset so the page
+    can answer 'how many vehicles have been detected so far' and 'how many are
+    currently in frame' without needing a separate tracks table.
+    """
+    location_name = str(video_record.get("location") or "")
+    base_timestamp = str(video_record.get("timestamp") or "")
+    by_track: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        try:
+            track_id = int(row.get("track_id"))
+        except (TypeError, ValueError):
+            continue
+        try:
+            frame = int(row.get("frame_number") or 0)
+        except (TypeError, ValueError):
+            frame = 0
+        offset = _parse_clock_offset_seconds(row.get("timestamp"))
+        class_name = (row.get("class_name") or "").strip() or None
+        existing = by_track.get(track_id)
+        if existing is None:
+            by_track[track_id] = {
+                "trackId": track_id,
+                "vehicleClass": class_name,
+                "firstFrame": frame,
+                "lastFrame": frame,
+                "firstOffset": offset,
+                "lastOffset": offset,
+            }
+            continue
+        if frame < existing["firstFrame"]:
+            existing["firstFrame"] = frame
+            existing["firstOffset"] = offset
+        if frame > existing["lastFrame"]:
+            existing["lastFrame"] = frame
+            existing["lastOffset"] = offset
+        if existing.get("vehicleClass") is None and class_name:
+            existing["vehicleClass"] = class_name
+
+    events: list[dict[str, Any]] = []
+    for track in by_track.values():
+        events.append(
+            {
+                "id": str(uuid4()),
+                "type": "vehicle-track",
+                "location": location_name,
+                "timestamp": base_timestamp,
+                "description": (
+                    f"{track['vehicleClass'] or 'vehicle'} #{track['trackId']} "
+                    f"first seen at {track['firstOffset']:.1f}s, last seen at {track['lastOffset']:.1f}s"
+                ),
+                "videoId": video_id,
+                "frame": track["firstFrame"],
+                "offsetSeconds": track["firstOffset"],
+                "vehicleClass": track["vehicleClass"],
+                "trackId": track["trackId"],
+                "lastOffsetSeconds": track["lastOffset"],
+                "lastFrame": track["lastFrame"],
+            }
+        )
+    return events
+
+
 def _parse_clock_offset_seconds(value: Any) -> float:
     """RT-DETR's CSV stores `timestamp` as HH:MM:SS or MM:SS clock-from-video-start."""
     raw = str(value or "").strip()
@@ -214,10 +294,10 @@ def run_vehicle_inference(
     output_dir = PROCESSED_VIDEOS_DIR / video_id
     output_dir.mkdir(parents=True, exist_ok=True)
     output_video = output_dir / f"{video_path.stem}.mp4"
-    counts_csv = output_video.with_suffix("")
-    counts_csv = Path(str(counts_csv) + "_counts.csv")
-    summary_txt = output_video.with_suffix("")
-    summary_txt = Path(str(summary_txt) + "_summary.txt")
+    sidecar_stem = str(output_video.with_suffix(""))
+    counts_csv = Path(sidecar_stem + "_counts.csv")
+    summary_txt = Path(sidecar_stem + "_summary.txt")
+    detections_csv = Path(sidecar_stem + "_detections.csv")
 
     cmd: list[str] = [
         sys.executable,
@@ -272,8 +352,11 @@ def run_vehicle_inference(
         )
 
     csv_rows = _parse_counts_csv(counts_csv)
-    events = _events_from_csv(csv_rows, video_id, video_record)
-    vehicle_count = _vehicle_count_from_summary(summary_txt, csv_rows)
+    detection_rows = _parse_detections_csv(detections_csv)
+    crossing_events = _events_from_csv(csv_rows, video_id, video_record)
+    track_events = _track_events_from_detections(detection_rows, video_id, video_record)
+    events = track_events + crossing_events
+    vehicle_count = len(track_events) if track_events else _vehicle_count_from_summary(summary_txt, csv_rows)
 
     processed_relative: Optional[str] = None
     if output_video.exists():

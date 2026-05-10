@@ -292,26 +292,40 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   }, [orderedEvents, trackingIdField])
 
   const pedestrianPlaybackWindows = useMemo(() => {
-    if (!isVehicle) {
-      const trackWindows = trackPlaybackWindows(video?.pedestrianTracks ?? [])
-      if (trackWindows.length > 0) {
-        return trackWindows
+    // VEHICLE: build per-track windows from `vehicle-track` events that carry
+    // first/last offsets from the per-frame detection log. Each window is the
+    // entire span the track was visible — so "Total" counts unique tracks ever
+    // detected, and "Detected now" counts tracks active at currentTime.
+    if (isVehicle) {
+      const windows: Array<{ start: number; end: number }> = []
+      for (const event of orderedEvents) {
+        if (event.type !== "vehicle-track" || typeof event.trackId !== "number") continue
+        if (typeof event.offsetSeconds !== "number") continue
+        const start = Math.max(0, event.offsetSeconds)
+        const lastOffset = typeof event.lastOffsetSeconds === "number" ? event.lastOffsetSeconds : start
+        const end = Math.max(start, lastOffset)
+        windows.push(createPlaybackWindow(start, end))
       }
+      return windows
+    }
+
+    // PEDESTRIAN: unchanged — prefer pedestrianTracks then fall back to event-derived windows.
+    const trackWindows = trackPlaybackWindows(video?.pedestrianTracks ?? [])
+    if (trackWindows.length > 0) {
+      return trackWindows
     }
 
     const windows = new Map<number, { start: number; end: number }>()
-
     for (const event of orderedEvents) {
-      const trackingId = event[trackingIdField]
-      if (event.type !== trackingType || typeof trackingId !== "number" || typeof event.offsetSeconds !== "number") {
+      if (event.type !== "detection" || typeof event.pedestrianId !== "number" || typeof event.offsetSeconds !== "number") {
         continue
       }
 
       const offset = Math.max(0, event.offsetSeconds)
-      const existingWindow = windows.get(trackingId)
+      const existingWindow = windows.get(event.pedestrianId)
 
       if (!existingWindow) {
-        windows.set(trackingId, { start: offset, end: offset })
+        windows.set(event.pedestrianId, { start: offset, end: offset })
         continue
       }
 
@@ -320,7 +334,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     }
 
     return Array.from(windows.values()).map((window) => createPlaybackWindow(window.start, window.end))
-  }, [isVehicle, orderedEvents, trackingIdField, trackingType, video?.pedestrianTracks])
+  }, [isVehicle, orderedEvents, video?.pedestrianTracks])
 
   const trackedPedestriansSoFar = useMemo(() => {
     return pedestrianPlaybackWindows.reduce((count, window) => (window.start <= currentTimeSeconds ? count + 1 : count), 0)
@@ -384,7 +398,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     {
       icon: isVehicle ? Car : Users,
       value: String(trackedPedestriansSoFar),
-      caption: "Total so far",
+      caption: isVehicle ? "Total vehicle detects" : "Total so far",
       iconClassName: "bg-emerald-500 text-white ring-emerald-500/20",
       valueClassName: "text-emerald-100 sm:text-foreground",
       cardClassName: "border-emerald-400/30 bg-gradient-to-br from-emerald-500/18 via-green-500/10 to-transparent",
@@ -392,7 +406,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     {
       icon: isVehicle ? CarFront : Footprints,
       value: String(liveDetectedCount),
-      caption: "Detected now",
+      caption: isVehicle ? "Current detects" : "Detected now",
       iconClassName: "bg-cyan-500 text-white ring-cyan-500/20",
       valueClassName: "text-cyan-100 sm:text-foreground",
       cardClassName: "border-cyan-400/30 bg-gradient-to-br from-cyan-500/20 via-sky-500/10 to-transparent",
@@ -400,7 +414,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     showEnteringTile && {
       icon: LogIn,
       value: directionDataAvailable ? String(enteringCount) : "--",
-      caption: "Entering so far",
+      caption: isVehicle ? "Entered" : "Entering so far",
       iconClassName: "bg-violet-500/90 text-white ring-violet-500/20",
       valueClassName: "text-foreground",
       cardClassName: "border-violet-400/25 bg-gradient-to-br from-violet-500/12 via-fuchsia-500/8 to-transparent",
@@ -408,7 +422,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     showExitingTile && {
       icon: LogOut,
       value: directionDataAvailable ? String(exitingCount) : "--",
-      caption: "Exiting so far",
+      caption: isVehicle ? "Exited" : "Exiting so far",
       iconClassName: "bg-amber-500/90 text-white ring-amber-500/20",
       valueClassName: "text-foreground",
       cardClassName: "border-amber-400/25 bg-gradient-to-br from-amber-500/12 via-orange-500/8 to-transparent",

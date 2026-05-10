@@ -15,12 +15,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { ChevronLeft, FileVideo } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { ChevronLeft, FileVideo, Trash2 } from "lucide-react"
 
 export default function QueuePage() {
-  const { uploads, cancelUpload, activeCount, queuedCount, completedCount, maxConcurrentUploads } = useUploadQueue()
+  const { uploads, cancelUpload, clearHistory, activeCount, queuedCount, completedCount, terminalCount, maxConcurrentUploads } = useUploadQueue()
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false)
   const pendingCancelUpload = uploads.find((upload) => upload.id === pendingCancelId) ?? null
 
   const handleConfirmCancel = async () => {
@@ -58,6 +60,17 @@ export default function QueuePage() {
             </div>
 
             <div className="hidden items-center gap-2 md:flex">
+              {terminalCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-2xl border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setConfirmClearOpen(true)}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Clear {terminalCount} {terminalCount === 1 ? "item" : "items"}
+                </Button>
+              )}
               <div className="rounded-2xl border border-border bg-secondary px-4 py-2 text-right">
                 <p className="text-[11px] text-muted-foreground">Total</p>
                 <p className="text-lg font-semibold text-white">{uploads.length}</p>
@@ -124,6 +137,31 @@ export default function QueuePage() {
               }}
             >
               {isCancelling ? "Cancelling..." : "Yes, Cancel Upload"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmClearOpen} onOpenChange={setConfirmClearOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear {terminalCount} finished {terminalCount === 1 ? "item" : "items"}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes complete, errored, and cancelled uploads from the queue list.
+              Any active or queued uploads remain. The processed videos themselves are not deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep history</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(event) => {
+                event.preventDefault()
+                clearHistory()
+                setConfirmClearOpen(false)
+              }}
+            >
+              Clear queue
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -8,9 +8,10 @@ interface WalkingLoaderProps {
   label: string
   progress?: number | null
   onClose?: () => void
+  variant?: "pedestrian" | "vehicle"
 }
 
-export function WalkingLoader({ isVisible, label, progress = null, onClose }: WalkingLoaderProps) {
+export function WalkingLoader({ isVisible, label, progress = null, onClose, variant = "pedestrian" }: WalkingLoaderProps) {
   const [frame, setFrame] = useState(0)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   
@@ -115,74 +116,120 @@ export function WalkingLoader({ isVisible, label, progress = null, onClose }: Wa
             />
           </div>
           
-          {/* Stick Figure */}
-          <svg 
-            viewBox="0 0 60 72" 
-            className="w-16 h-20"
-            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }}
-          >
-            {/* Head */}
-            <circle 
-              cx={pose.head.cx} 
-              cy={pose.head.cy} 
-              r="8" 
-              fill="none" 
-              stroke="url(#gradient)" 
-              strokeWidth="3"
-              strokeLinecap="round"
-            />
-            
-            {/* Body */}
-            <path 
-              d={pose.body} 
-              stroke="url(#gradient)" 
-              strokeWidth="3" 
-              strokeLinecap="round"
-              fill="none"
-            />
-            
-            {/* Arms */}
-            <path 
-              d={pose.leftArm} 
-              stroke="url(#gradient)" 
-              strokeWidth="2.5" 
-              strokeLinecap="round"
-              fill="none"
-            />
-            <path 
-              d={pose.rightArm} 
-              stroke="url(#gradient)" 
-              strokeWidth="2.5" 
-              strokeLinecap="round"
-              fill="none"
-            />
-            
-            {/* Legs */}
-            <path 
-              d={pose.leftLeg} 
-              stroke="url(#gradient)" 
-              strokeWidth="2.5" 
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-            <path 
-              d={pose.rightLeg} 
-              stroke="url(#gradient)" 
-              strokeWidth="2.5" 
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-            
-            {/* Gradient Definition */}
-            <defs>
-              <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#A855F7" />
-                <stop offset="100%" stopColor="#22D3EE" />
-              </linearGradient>
-            </defs>
-          </svg>
+          {variant === "vehicle" ? (
+            <svg
+              viewBox="0 0 80 56"
+              className="w-20 h-16"
+              style={{
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+                transform: `translateY(${frame % 2 === 0 ? '-1px' : '1px'})`,
+                transition: 'transform 0.1s linear',
+              }}
+            >
+              {/* Car body — silhouette of a sedan */}
+              <path
+                d="M8 38 Q8 30 16 28 L24 18 Q26 14 32 14 L52 14 Q58 14 60 18 L68 28 Q72 30 72 38 L72 42 Q72 44 70 44 L62 44 L58 44 Q58 40 54 40 Q50 40 50 44 L30 44 Q30 40 26 40 Q22 40 22 44 L18 44 L10 44 Q8 44 8 42 Z"
+                stroke="url(#gradient)"
+                strokeWidth="2.2"
+                strokeLinejoin="round"
+                fill="none"
+              />
+              {/* Windows */}
+              <path
+                d="M26 28 L30 18 L50 18 L54 28 Z"
+                stroke="url(#gradient)"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+                fill="none"
+              />
+              {/* Front + rear wheels */}
+              <circle cx="26" cy="44" r="5" stroke="url(#gradient)" strokeWidth="2" fill="none" />
+              <circle cx="54" cy="44" r="5" stroke="url(#gradient)" strokeWidth="2" fill="none" />
+              {/* Headlight (subtle pulse via frame) */}
+              <circle
+                cx="68"
+                cy="34"
+                r={frame % 2 === 0 ? 1.6 : 2.2}
+                fill="#22D3EE"
+                opacity={frame % 2 === 0 ? 0.6 : 1}
+              />
+
+              <defs>
+                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#A855F7" />
+                  <stop offset="100%" stopColor="#22D3EE" />
+                </linearGradient>
+              </defs>
+            </svg>
+          ) : (
+            <svg
+              viewBox="0 0 60 72"
+              className="w-16 h-20"
+              style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))' }}
+            >
+              {/* Head */}
+              <circle
+                cx={pose.head.cx}
+                cy={pose.head.cy}
+                r="8"
+                fill="none"
+                stroke="url(#gradient)"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+
+              {/* Body */}
+              <path
+                d={pose.body}
+                stroke="url(#gradient)"
+                strokeWidth="3"
+                strokeLinecap="round"
+                fill="none"
+              />
+
+              {/* Arms */}
+              <path
+                d={pose.leftArm}
+                stroke="url(#gradient)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                fill="none"
+              />
+              <path
+                d={pose.rightArm}
+                stroke="url(#gradient)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                fill="none"
+              />
+
+              {/* Legs */}
+              <path
+                d={pose.leftLeg}
+                stroke="url(#gradient)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+              <path
+                d={pose.rightLeg}
+                stroke="url(#gradient)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                fill="none"
+              />
+
+              {/* Gradient Definition */}
+              <defs>
+                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#A855F7" />
+                  <stop offset="100%" stopColor="#22D3EE" />
+                </linearGradient>
+              </defs>
+            </svg>
+          )}
         </div>
         
         {/* Label */}
