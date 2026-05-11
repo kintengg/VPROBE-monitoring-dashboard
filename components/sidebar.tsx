@@ -4,17 +4,21 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { BantaySidebarLogo } from "@/components/bantay-sidebar-logo"
-import { 
+import {
+  Car,
+  Cpu,
+  Footprints,
+  LayoutDashboard,
   ListOrdered,
-  LayoutDashboard, 
-  Video, 
-  User
+  User,
 } from "lucide-react"
 
 const navItems = [
-  { icon: Video, label: "Surveillance", href: "/" },
+  { icon: LayoutDashboard, label: "Unified", href: "/" },
+  { icon: Footprints, label: "Pedestrian", href: "/pedestrian" },
+  { icon: Car, label: "Vehicle", href: "/vehicle" },
   { icon: ListOrdered, label: "Queue", href: "/queue" },
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+  { icon: Cpu, label: "Models", href: "/models" },
 ]
 
 export function Sidebar() {
@@ -33,10 +37,11 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 flex flex-col items-center py-6 gap-3">
         {navItems.map((item) => {
-          const isActive = pathname === item.href || 
-            (item.href === "/" && pathname.startsWith("/video")) ||
-            (item.href === "/dashboard" && pathname === "/search") ||
-            (item.href === "/queue" && pathname.startsWith("/queue"))
+          const isActive = pathname === item.href ||
+            (item.href === "/pedestrian" && (pathname.startsWith("/pedestrian") || pathname.startsWith("/video") || pathname === "/search")) ||
+            (item.href === "/queue" && pathname.startsWith("/queue")) ||
+            (item.href === "/vehicle" && pathname.startsWith("/vehicle")) ||
+            (item.href === "/models" && pathname.startsWith("/models"))
           return (
             <Link
               key={item.href}

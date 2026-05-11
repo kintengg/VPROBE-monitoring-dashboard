@@ -10,7 +10,7 @@ import { EventFeed } from "@/components/surveillance/event-feed"
 import { AISearchBar } from "@/components/surveillance/ai-search-bar"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { AlertCircle, ArrowLeft, Download, Footprints, Loader2, LogIn, LogOut, Share2, Trash2, Users } from "lucide-react"
+import { AlertCircle, ArrowLeft, Car, CarFront, Download, Footprints, Loader2, LogIn, LogOut, Share2, Trash2, Users } from "lucide-react"
 import {
   deleteVideo,
   getEvents,
@@ -273,27 +273,49 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     return Number.isFinite(seekValue) && seekValue >= 0 ? [seekValue] : []
   }, [searchParams])
 
+  const isVehicle = videoLocation?.domain === "vehicle"
+  const flowGroup = videoLocation?.flowGroup ?? null
+  const trackingType: EventRecord["type"] = isVehicle ? "vehicle-detection" : "detection"
+  const trackingIdField: "trackId" | "pedestrianId" = isVehicle ? "trackId" : "pedestrianId"
+
   const detectionDetails = useMemo(() => {
     const seen = new Set<number>()
-
     return orderedEvents
-      .filter((event): event is EventRecord & { pedestrianId: number } => typeof event.pedestrianId === "number")
+      .filter((event) => typeof event[trackingIdField] === "number")
       .filter((event) => {
-        if (seen.has(event.pedestrianId)) return false
-        seen.add(event.pedestrianId)
+        const trackingId = event[trackingIdField] as number
+        if (seen.has(trackingId)) return false
+        seen.add(trackingId)
         return true
       })
-      .map((event) => ({ id: event.pedestrianId, status: getDetectionStatus(event) }))
-  }, [orderedEvents])
+      .map((event) => ({ id: event[trackingIdField] as number, status: getDetectionStatus(event) }))
+  }, [orderedEvents, trackingIdField])
 
   const pedestrianPlaybackWindows = useMemo(() => {
+    // VEHICLE: build per-track windows from `vehicle-track` events that carry
+    // first/last offsets from the per-frame detection log. Each window is the
+    // entire span the track was visible — so "Total" counts unique tracks ever
+    // detected, and "Detected now" counts tracks active at currentTime.
+    if (isVehicle) {
+      const windows: Array<{ start: number; end: number }> = []
+      for (const event of orderedEvents) {
+        if (event.type !== "vehicle-track" || typeof event.trackId !== "number") continue
+        if (typeof event.offsetSeconds !== "number") continue
+        const start = Math.max(0, event.offsetSeconds)
+        const lastOffset = typeof event.lastOffsetSeconds === "number" ? event.lastOffsetSeconds : start
+        const end = Math.max(start, lastOffset)
+        windows.push(createPlaybackWindow(start, end))
+      }
+      return windows
+    }
+
+    // PEDESTRIAN: unchanged — prefer pedestrianTracks then fall back to event-derived windows.
     const trackWindows = trackPlaybackWindows(video?.pedestrianTracks ?? [])
     if (trackWindows.length > 0) {
       return trackWindows
     }
 
     const windows = new Map<number, { start: number; end: number }>()
-
     for (const event of orderedEvents) {
       if (event.type !== "detection" || typeof event.pedestrianId !== "number" || typeof event.offsetSeconds !== "number") {
         continue
@@ -312,7 +334,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     }
 
     return Array.from(windows.values()).map((window) => createPlaybackWindow(window.start, window.end))
-  }, [orderedEvents, video?.pedestrianTracks])
+  }, [isVehicle, orderedEvents, video?.pedestrianTracks])
 
   const trackedPedestriansSoFar = useMemo(() => {
     return pedestrianPlaybackWindows.reduce((count, window) => (window.start <= currentTimeSeconds ? count + 1 : count), 0)
@@ -336,54 +358,83 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const hasCollapsedDetections = detectionDetails.length > 15
   const hasLocationROI = Boolean(videoLocation?.roiCoordinates?.includePolygonsNorm?.length)
   const hasEntryExitPoints = hasValidEntryExitPointsConfiguration(videoLocation?.entryExitPoints)
-  const directionalEvents = useMemo(
-    () => (hasEntryExitPoints ? [...(video?.directionalEvents ?? [])].sort((left, right) => left.offsetSeconds - right.offsetSeconds) : []),
-    [hasEntryExitPoints, video?.directionalEvents],
-  )
+
+  // Unified direction stream: pedestrian directionalEvents map "entering"/"exiting" -> "in"/"out";
+  // vehicle events already use "in"/"out" via their `direction` field.
+  const directionalCounts = useMemo(() => {
+    const stream: Array<{ direction: "in" | "out"; offsetSeconds: number }> = []
+    if (isVehicle) {
+      for (const event of orderedEvents) {
+        if (event.type !== "vehicle-detection" || (event.direction !== "in" && event.direction !== "out")) continue
+        if (typeof event.offsetSeconds !== "number") continue
+        stream.push({ direction: event.direction, offsetSeconds: event.offsetSeconds })
+      }
+    } else if (hasEntryExitPoints) {
+      for (const event of video?.directionalEvents ?? []) {
+        const mapped = event.direction === "entering" ? "in" : event.direction === "exiting" ? "out" : null
+        if (mapped) stream.push({ direction: mapped, offsetSeconds: event.offsetSeconds })
+      }
+    }
+    return stream.sort((left, right) => left.offsetSeconds - right.offsetSeconds)
+  }, [isVehicle, hasEntryExitPoints, orderedEvents, video?.directionalEvents])
+
   const enteringCount = useMemo(
-    () => directionalEvents.reduce((count, event) => (event.direction === "entering" && event.offsetSeconds <= currentTimeSeconds ? count + 1 : count), 0),
-    [currentTimeSeconds, directionalEvents],
+    () => directionalCounts.reduce((acc, ev) => (ev.direction === "in" && ev.offsetSeconds <= currentTimeSeconds ? acc + 1 : acc), 0),
+    [currentTimeSeconds, directionalCounts],
   )
   const exitingCount = useMemo(
-    () => directionalEvents.reduce((count, event) => (event.direction === "exiting" && event.offsetSeconds <= currentTimeSeconds ? count + 1 : count), 0),
-    [currentTimeSeconds, directionalEvents],
+    () => directionalCounts.reduce((acc, ev) => (ev.direction === "out" && ev.offsetSeconds <= currentTimeSeconds ? acc + 1 : acc), 0),
+    [currentTimeSeconds, directionalCounts],
   )
+
+  // For vehicles: each gate has a flowGroup; only show the relevant direction tile.
+  // For pedestrians (no flowGroup), show both as before.
+  const showEnteringTile = !isVehicle || flowGroup !== "Out"
+  const showExitingTile = !isVehicle || flowGroup !== "In"
+  const directionDataAvailable = isVehicle ? directionalCounts.length > 0 : hasEntryExitPoints
 
   const mediaUrl = video ? getMediaUrl(getVideoPlaybackPath(video)) : null
   const metricTiles = [
     {
-      icon: Users,
+      icon: isVehicle ? Car : Users,
       value: String(trackedPedestriansSoFar),
-      caption: "Total so far",
+      caption: isVehicle ? "Total vehicle detects" : "Total so far",
       iconClassName: "bg-emerald-500 text-white ring-emerald-500/20",
       valueClassName: "text-emerald-100 sm:text-foreground",
       cardClassName: "border-emerald-400/30 bg-gradient-to-br from-emerald-500/18 via-green-500/10 to-transparent",
     },
     {
-      icon: Footprints,
+      icon: isVehicle ? CarFront : Footprints,
       value: String(liveDetectedCount),
-      caption: "Detected now",
+      caption: isVehicle ? "Current detects" : "Detected now",
       iconClassName: "bg-cyan-500 text-white ring-cyan-500/20",
       valueClassName: "text-cyan-100 sm:text-foreground",
       cardClassName: "border-cyan-400/30 bg-gradient-to-br from-cyan-500/20 via-sky-500/10 to-transparent",
     },
-    {
+    showEnteringTile && {
       icon: LogIn,
-      value: hasEntryExitPoints ? String(enteringCount) : "--",
-      caption: "Entering so far",
+      value: directionDataAvailable ? String(enteringCount) : "--",
+      caption: isVehicle ? "Entered" : "Entering so far",
       iconClassName: "bg-violet-500/90 text-white ring-violet-500/20",
       valueClassName: "text-foreground",
       cardClassName: "border-violet-400/25 bg-gradient-to-br from-violet-500/12 via-fuchsia-500/8 to-transparent",
     },
-    {
+    showExitingTile && {
       icon: LogOut,
-      value: hasEntryExitPoints ? String(exitingCount) : "--",
-      caption: "Exiting so far",
+      value: directionDataAvailable ? String(exitingCount) : "--",
+      caption: isVehicle ? "Exited" : "Exiting so far",
       iconClassName: "bg-amber-500/90 text-white ring-amber-500/20",
       valueClassName: "text-foreground",
       cardClassName: "border-amber-400/25 bg-gradient-to-br from-amber-500/12 via-orange-500/8 to-transparent",
     },
-  ]
+  ].filter(Boolean) as Array<{
+    icon: React.ComponentType<{ className?: string }>
+    value: string
+    caption: string
+    iconClassName: string
+    valueClassName: string
+    cardClassName: string
+  }>
 
   const requestSeek = (seconds: number) => {
     const safeSeconds = Math.max(0, seconds)
@@ -532,6 +583,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
               location={video.location}
               src={mediaUrl}
               pedestrianCount={video.pedestrianCount}
+              isVehicle={isVehicle}
               timestamp={video.timestamp}
               date={video.date}
               isProcessed={Boolean(video.processedPath)}
@@ -578,7 +630,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
             />
             
             {/* Metadata Section */}
-            <VideoMetadata 
+            <VideoMetadata
               date={video.date}
               startTime={video.startTime}
               endTime={video.endTime}
@@ -586,6 +638,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
               gpsLng={video.gpsLng}
               trackedPedestriansSoFar={trackedPedestriansSoFar}
               pedestrianCount={video.pedestrianCount}
+              isVehicle={isVehicle}
             />
 
             {(hasLocationROI || hasEntryExitPoints) && (
@@ -637,7 +690,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
           {detectionDetails.length > 0 ? (
             <div className="space-y-2">
               {visibleDetectionDetails.map((detail) => (
-                <DetectionDetail key={detail.id} id={detail.id} status={detail.status} />
+                <DetectionDetail key={detail.id} id={detail.id} status={detail.status} isVehicle={isVehicle} />
               ))}
               {hasCollapsedDetections && (
                 <Button
@@ -650,7 +703,9 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
               )}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No tracked pedestrian IDs are available for this video yet.</p>
+            <p className="text-sm text-muted-foreground">
+              No tracked {isVehicle ? "vehicle" : "pedestrian"} IDs are available for this video yet.
+            </p>
           )}
         </div>
       </aside>
@@ -671,12 +726,12 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   )
 }
 
-function DetectionDetail({ id, status }: { id: number; status: string }) {
+function DetectionDetail({ id, status, isVehicle = false }: { id: number; status: string; isVehicle?: boolean }) {
   const statusColor = status === "Tracked" ? "text-primary" : status === "Requires Review" ? "text-destructive" : "text-accent"
-  
+
   return (
     <div className="flex items-center justify-between p-2 rounded-lg bg-secondary/50 border border-border">
-      <span className="text-sm text-foreground">Pedestrian ID #{id}</span>
+      <span className="text-sm text-foreground">{isVehicle ? "Vehicle" : "Pedestrian"} ID #{id}</span>
       <span className={`text-xs ${statusColor}`}>{status}</span>
     </div>
   )

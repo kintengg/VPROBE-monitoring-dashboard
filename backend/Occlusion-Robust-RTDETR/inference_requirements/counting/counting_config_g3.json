@@ -1,0 +1,10 @@
+{
+  "lines": [
+    {
+      "name": "gate3",
+      "start": [500, 300],
+      "end": [1920, 403],
+      "trigger_anchors": ["CENTER"]
+    }
+  ]
+}

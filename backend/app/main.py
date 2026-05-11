@@ -17,7 +17,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import gemini, inference, schemas, store
+from . import gemini, inference, model_registry, schemas, store, vehicle_inference, vehicle_store
+from .vehicle import counting as vehicle_counting
+from .vehicle import gates as vehicle_gates
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCAL_ENV_PATHS = (REPO_ROOT / ".env.local", REPO_ROOT / "backend" / ".env.local")
@@ -145,6 +147,8 @@ def search_google_places(query: str) -> list[dict[str, Any]]:
 @app.on_event("startup")
 def startup() -> None:
     store.ensure_storage_layout()
+    model_registry.init_registry()
+    vehicle_store.ensure_gate_locations_seeded()
 
 
 def _video_needs_search_backfill(state: dict[str, Any], video: dict[str, Any]) -> bool:
@@ -230,8 +234,8 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/locations", response_model=list[schemas.LocationRecord])
-def get_locations(date: Optional[str] = None) -> list[dict]:
-    return store.list_locations(date)
+def get_locations(date: Optional[str] = None, domain: Optional[str] = None) -> list[dict]:
+    return store.list_locations(date, domain)
 
 
 @app.get("/api/locations/search", response_model=list[schemas.LocationSearchResult])
@@ -322,11 +326,24 @@ async def upload_video(
     fastMode: bool = Form(False),
     uploadId: Optional[str] = Form(None),
 ) -> dict:
-    status = inference.ultralytics_status()
-    if not status["ready"]:
-        if uploadId:
-            store.set_upload_status(uploadId, state="error", progress_percent=None, message="Inference engine is not ready.", error="Inference engine is not ready. Upload a valid model before processing videos.")
-        raise HTTPException(status_code=503, detail="Inference engine is not ready. Upload a valid model before processing videos.")
+    target_location = next(
+        (loc for loc in store.list_locations() if loc["id"] == locationId),
+        None,
+    )
+    target_domain = (target_location.get("domain") if target_location else None) or "pedestrian"
+
+    if target_domain == "pedestrian":
+        status = inference.ultralytics_status()
+        if not status["ready"]:
+            if uploadId:
+                store.set_upload_status(uploadId, state="error", progress_percent=None, message="Inference engine is not ready.", error="Inference engine is not ready. Upload a valid model before processing videos.")
+            raise HTTPException(status_code=503, detail="Inference engine is not ready. Upload a valid model before processing videos.")
+    else:
+        if model_registry.active_weight_path("vehicle") is None:
+            detail = "Vehicle inference model is missing. Visit /models to upload one."
+            if uploadId:
+                store.set_upload_status(uploadId, state="error", progress_percent=None, message=detail, error=detail)
+            raise HTTPException(status_code=503, detail=detail)
 
     safe_name = safe_filename(file.filename or "video.mp4")
     raw_target = store.RAW_VIDEOS_DIR / f"{uuid4().hex[:8]}-{safe_name}"
@@ -396,31 +413,56 @@ async def upload_video(
 
         handle_processing_progress.cancel_check = ensure_not_cancelled  # type: ignore[attr-defined]
 
-        result = await run_in_threadpool(
-            inference.run_video_inference,
-            raw_target,
-            None,
-            video,
-            fastMode,
-            handle_processing_progress,
-        )
-        ensure_not_cancelled()
-        if uploadId:
-            store.set_upload_status(
-                uploadId,
-                state="processing",
-                progress_percent=95,
-                message="Calculating Pedestrian Traffic Severity Index...",
-                phase="ptsi",
-                video_id=video["id"],
+        if target_domain == "vehicle":
+            result = await run_in_threadpool(
+                vehicle_inference.run_vehicle_inference,
+                raw_target,
+                video,
+                progress_callback=handle_processing_progress,
             )
-        response = store.set_video_inference_result(
-            video_id=video["id"],
-            pedestrian_count=result.get("pedestrianCount", 0),
-            processed_path=result.get("processedPath"),
-            events=result.get("events", []),
-            pedestrian_tracks=result.get("pedestrianTracks", []),
-        )
+            ensure_not_cancelled()
+            if uploadId:
+                store.set_upload_status(
+                    uploadId,
+                    state="processing",
+                    progress_percent=96,
+                    message="Persisting vehicle detections...",
+                    phase="finalizing",
+                    video_id=video["id"],
+                )
+            response = store.set_video_inference_result(
+                video_id=video["id"],
+                pedestrian_count=int(result.get("vehicleCount") or 0),
+                processed_path=result.get("processedPath"),
+                events=result.get("events", []),
+                pedestrian_tracks=[],
+            )
+        else:
+            result = await run_in_threadpool(
+                inference.run_video_inference,
+                raw_target,
+                None,
+                video,
+                fastMode,
+                handle_processing_progress,
+            )
+            ensure_not_cancelled()
+            if uploadId:
+                store.set_upload_status(
+                    uploadId,
+                    state="processing",
+                    progress_percent=95,
+                    message="Calculating Pedestrian Traffic Severity Index...",
+                    phase="ptsi",
+                    video_id=video["id"],
+                )
+            response = store.set_video_inference_result(
+                video_id=video["id"],
+                pedestrian_count=result.get("pedestrianCount", 0),
+                processed_path=result.get("processedPath"),
+                events=result.get("events", []),
+                pedestrian_tracks=result.get("pedestrianTracks", []),
+            )
         if uploadId:
             store.set_upload_status(uploadId, state="complete", progress_percent=100, message="Video upload and processing complete.", video_id=video["id"])
         return response
@@ -525,3 +567,235 @@ async def upload_model(file: UploadFile = File(...)) -> dict:
     target = store.MODELS_DIR / filename
     target.write_bytes(await file.read())
     return store.set_model(filename)
+
+
+_DOMAIN_UPLOAD_EXTENSIONS = {
+    "pedestrian": {".pt"},
+    "vehicle": {".pt", ".pth"},
+}
+
+
+def _validate_domain(domain: str) -> None:
+    if domain not in model_registry.DOMAINS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown model domain '{domain}'. Expected one of: {list(model_registry.DOMAINS)}",
+        )
+
+
+@app.get("/api/models", response_model=schemas.ModelRegistryResponse)
+def get_model_registry() -> dict[str, Any]:
+    return {
+        "domains": model_registry.list_domains(),
+        "updatedAt": model_registry.get_registry().get("updatedAt"),
+    }
+
+
+@app.get("/api/models/{domain}", response_model=schemas.ModelDomainInfo)
+def get_model_domain(domain: str) -> dict[str, Any]:
+    _validate_domain(domain)
+    return model_registry.get_domain(domain)
+
+
+@app.post("/api/models/settings", response_model=schemas.ModelDomainInfo)
+def update_model_settings(payload: schemas.ModelSettingsUpdate) -> dict[str, Any]:
+    _validate_domain(payload.domain)
+    try:
+        return model_registry.set_active(payload.domain, payload.weightId)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post(
+    "/api/models/{domain}/upload",
+    response_model=schemas.ModelDomainInfo,
+    status_code=201,
+)
+async def upload_domain_model(
+    domain: str,
+    file: UploadFile = File(...),
+    label: Optional[str] = Form(None),
+    setActive: bool = Form(True),
+) -> dict[str, Any]:
+    _validate_domain(domain)
+    filename = safe_filename(file.filename or f"{domain}-model.pt")
+    suffix = Path(filename).suffix.lower()
+    allowed = _DOMAIN_UPLOAD_EXTENSIONS[domain]
+    if suffix not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Domain '{domain}' accepts only {sorted(allowed)} files",
+        )
+    domain_dir = store.MODELS_DIR / domain
+    domain_dir.mkdir(parents=True, exist_ok=True)
+    target = domain_dir / filename
+    target.write_bytes(await file.read())
+    weight_id = Path(filename).stem
+    relative_path = f"{domain}/{filename}"
+    try:
+        return model_registry.add_weight(
+            domain,
+            weight_id=weight_id,
+            filename=filename,
+            relative_path=relative_path,
+            label=label,
+            set_active_after=bool(setActive),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.delete("/api/models/{domain}/weights/{weight_id}", response_model=schemas.ModelDomainInfo)
+def delete_domain_weight(domain: str, weight_id: str) -> dict[str, Any]:
+    _validate_domain(domain)
+    try:
+        return model_registry.remove_weight(domain, weight_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# --- Inference requirement configs (counting / infer YAMLs) ---
+
+
+@app.get(
+    "/api/inference/requirements/counting-configs",
+    response_model=schemas.CountingConfigList,
+)
+def list_counting_configs_endpoint() -> dict[str, Any]:
+    options = vehicle_counting.list_counting_configs()
+    return {"options": options, "defaultConfig": options[0] if options else None}
+
+
+@app.get(
+    "/api/inference/requirements/infer-configs",
+    response_model=schemas.InferConfigList,
+)
+def list_infer_configs_endpoint() -> dict[str, Any]:
+    options = vehicle_counting.list_infer_configs()
+    return {"options": options, "defaultConfig": options[0] if options else None}
+
+
+@app.post(
+    "/api/inference/requirements/upload",
+    response_model=schemas.InferenceRequirementUploadResult,
+    status_code=201,
+)
+async def upload_inference_requirement(
+    file: UploadFile = File(...),
+    requirementType: str = Form(...),
+) -> dict[str, Any]:
+    requirement_type = requirementType.strip().lower()
+    if requirement_type not in vehicle_counting.VALID_REQUIREMENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid requirementType. Use one of: {list(vehicle_counting.VALID_REQUIREMENT_TYPES)}",
+        )
+    filename = safe_filename(file.filename or "upload.bin")
+    suffix = Path(filename).suffix.lower()
+    expected = {
+        "infer-config": {".yml", ".yaml"},
+        "annotations": {".json"},
+        "counting-config": {".json"},
+    }
+    if suffix not in expected[requirement_type]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{requirement_type} must be one of: {sorted(expected[requirement_type])}",
+        )
+    target_dir = vehicle_counting.requirement_target_dir(requirement_type)
+    target_path = target_dir / filename
+    target_path.write_bytes(await file.read())
+    relative = target_path.relative_to(store.BACKEND_DIR.parent)
+    return {
+        "requirementType": requirement_type,
+        "filename": filename,
+        "savedPath": str(relative),
+        "message": f"Uploaded {filename} to {target_dir.relative_to(store.BACKEND_DIR.parent)}",
+    }
+
+
+# --- Vehicle endpoints ---
+
+
+@app.get("/api/vehicle/gates", response_model=list[schemas.VehicleGate])
+def list_vehicle_gates() -> list[dict[str, Any]]:
+    return vehicle_gates.list_gates()
+
+
+@app.get("/api/vehicle/dashboard/summary", response_model=schemas.VehicleSummary)
+def get_vehicle_summary(date: Optional[str] = None) -> dict[str, Any]:
+    return vehicle_store.vehicle_summary(date)
+
+
+@app.get("/api/vehicle/dashboard/los", response_model=list[schemas.VehicleGateLOS])
+def get_vehicle_los(date: Optional[str] = None) -> list[dict[str, Any]]:
+    events = vehicle_store.list_vehicle_events(date)
+    return vehicle_store.per_gate_los(events)
+
+
+@app.get("/api/vehicle/dashboard/class-breakdown", response_model=list[schemas.VehicleClassBreakdown])
+def get_vehicle_class_breakdown(date: Optional[str] = None) -> list[dict[str, Any]]:
+    events = vehicle_store.list_vehicle_events(date)
+    return vehicle_store.class_breakdown(events)
+
+
+@app.get("/api/vehicle/dashboard/traffic", response_model=schemas.VehicleTrafficResponse)
+def get_vehicle_traffic(
+    date: Optional[str] = None,
+    timeRange: str = "whole-day",
+    bucketMinutes: int = 60,
+) -> dict[str, Any]:
+    series = vehicle_store.vehicle_traffic_series(date, bucketMinutes)
+    return {"timeRange": timeRange, "bucketMinutes": bucketMinutes, "series": series}
+
+
+@app.get("/api/vehicle/events", response_model=list[schemas.EventRecord])
+def get_vehicle_events(date: Optional[str] = None, gateId: Optional[str] = None) -> list[dict[str, Any]]:
+    return vehicle_store.list_vehicle_events(date, gateId)
+
+
+# --- Pedestrian aliases (mirror of /api/dashboard/* under symmetric namespace) ---
+
+
+@app.get("/api/pedestrian/dashboard/summary", response_model=schemas.DashboardSummary)
+def get_pedestrian_summary(date: Optional[str] = None) -> dict[str, Any]:
+    return get_dashboard_summary(date)
+
+
+@app.get("/api/pedestrian/dashboard/traffic", response_model=schemas.TrafficResponse)
+def get_pedestrian_traffic(
+    date: Optional[str] = None,
+    timeRange: str = "12h",
+    focusTime: Optional[str] = None,
+    startTime: Optional[str] = None,
+    zoomLevel: int = 0,
+    locationId: Optional[str] = None,
+) -> dict[str, Any]:
+    return get_dashboard_traffic(date, timeRange, focusTime, startTime, zoomLevel, locationId)
+
+
+@app.get("/api/pedestrian/dashboard/occlusion", response_model=schemas.PTSIMapResponse)
+def get_pedestrian_occlusion(
+    date: Optional[str] = None,
+    timeRange: str = "12h",
+    startTime: Optional[str] = None,
+) -> dict[str, Any]:
+    return get_dashboard_occlusion(date, timeRange, startTime)
+
+
+@app.get("/api/pedestrian/dashboard/occlusion-trends", response_model=schemas.PTSITrendResponse)
+def get_pedestrian_occlusion_trends(
+    date: Optional[str] = None,
+    timeRange: str = "12h",
+    focusTime: Optional[str] = None,
+    startTime: Optional[str] = None,
+    zoomLevel: int = 0,
+) -> dict[str, Any]:
+    return get_dashboard_occlusion_trends(date, timeRange, focusTime, startTime, zoomLevel)
+
+
+@app.get("/api/pedestrian/events", response_model=list[schemas.EventRecord])
+def get_pedestrian_events(videoId: Optional[str] = None) -> list[dict[str, Any]]:
+    return get_events(videoId)

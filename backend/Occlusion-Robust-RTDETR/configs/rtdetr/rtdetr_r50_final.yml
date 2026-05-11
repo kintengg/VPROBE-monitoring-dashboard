@@ -1,0 +1,12 @@
+__include__: [
+  '../dataset/final_dataset.yml',
+  '../runtime.yml',
+  './include/dataloader.yml',
+  './include/optimizer.yml',
+  './include/rtdetr_r50vd.yml',
+]
+
+output_dir: ./output/rtdetr_resnet50_final
+checkpoint_step: 5
+
+epoches: 72

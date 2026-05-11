@@ -105,6 +105,10 @@ LOCATION_PERSISTED_FIELDS = (
     "roiCoordinates",
     "entryExitPoints",
     "walkableAreaM2",
+    "domain",
+    "roadLengthM",
+    "laneCount",
+    "flowGroup",
 )
 SEARCH_STOPWORDS = {
     "a",
@@ -1189,15 +1193,25 @@ def delete_video_assets(video: Optional[dict[str, Any]]) -> None:
         _remove_portable_video_artifacts(str(video_id))
 
 
-def list_locations(date: Optional[str] = None) -> list[dict[str, Any]]:
+def list_locations(date: Optional[str] = None, domain: Optional[str] = None) -> list[dict[str, Any]]:
     state = load_state()
     videos = state["videos"]
     if date:
         videos = [video for video in videos if video["date"] == date]
     grouped: list[dict[str, Any]] = []
     for location in state["locations"]:
+        if domain and (location.get("domain") or "pedestrian") != domain:
+            continue
         grouped.append({**location, "videos": _location_video_cards(videos, location["id"])})
     return grouped
+
+
+def _pedestrian_locations(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """All locations whose `domain` is pedestrian (or unset, for backward compat)."""
+    return [
+        loc for loc in state.get("locations", [])
+        if (loc.get("domain") or "pedestrian") == "pedestrian"
+    ]
 
 
 def add_location(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1487,10 +1501,19 @@ def _resolve_dashboard_date(videos: list[dict[str, Any]], date: Optional[str]) -
     return datetime.utcnow().strftime("%Y-%m-%d")
 
 
-def _filtered_dashboard_records(date: Optional[str]) -> tuple[dict[str, Any], str, list[dict[str, Any]], list[dict[str, Any]]]:
+def _filtered_dashboard_records(
+    date: Optional[str],
+    domain: Optional[str] = None,
+) -> tuple[dict[str, Any], str, list[dict[str, Any]], list[dict[str, Any]]]:
     state = load_state()
     resolved_date = _resolve_dashboard_date(state["videos"], date)
     videos = [video for video in state["videos"] if video.get("date") == resolved_date]
+    if domain:
+        location_domains = {
+            loc["id"]: (loc.get("domain") or "pedestrian")
+            for loc in state.get("locations", [])
+        }
+        videos = [v for v in videos if location_domains.get(str(v.get("locationId"))) == domain]
     video_ids = {video["id"] for video in videos}
     events = [event for event in state["events"] if event.get("videoId") in video_ids]
     return state, resolved_date, videos, events
@@ -2821,7 +2844,7 @@ def _video_severity_summary(state: dict[str, Any], video: dict[str, Any]) -> dic
 
 
 def dashboard_summary(date: Optional[str] = None) -> dict[str, Any]:
-    state, _, videos, events = _filtered_dashboard_records(date)
+    state, _, videos, events = _filtered_dashboard_records(date, domain="pedestrian")
     pedestrian_tracks = _filtered_pedestrian_tracks(state, videos)
     _samples, first_seen_by_track = _build_analytics_samples(videos, events, pedestrian_tracks)
     return {
@@ -2838,7 +2861,7 @@ def dashboard_traffic(
     focus_time: Optional[str] = None,
     zoom_level: int = 0,
 ) -> dict[str, Any]:
-    state, resolved_date, videos, events = _filtered_dashboard_records(date)
+    state, resolved_date, videos, events = _filtered_dashboard_records(date, domain="pedestrian")
     pedestrian_tracks = _filtered_pedestrian_tracks(state, videos)
     samples, first_seen_by_track = _build_analytics_samples(videos, events, pedestrian_tracks)
     observation_times = [sample["observedAt"] for sample in samples]
@@ -2848,7 +2871,7 @@ def dashboard_traffic(
     root_window_start, _root_window_end, _root_bucket_minutes = _resolve_root_window(resolved_date, time_range, observation_times)
     buckets, bucket_span, bucket_meta = _build_bucket_plan(resolved_date, time_range, observation_times, focus_time, zoom_level)
     active_location_ids = _active_location_ids(videos)
-    active_location_names = [location["name"] for location in state["locations"] if location["id"] in active_location_ids]
+    active_location_names = [location["name"] for location in _pedestrian_locations(state) if location["id"] in active_location_ids]
     series = _traffic_series_from_samples(
         buckets,
         bucket_span,
@@ -2886,7 +2909,7 @@ def dashboard_occlusion_trends(
     focus_time: Optional[str] = None,
     zoom_level: int = 0,
 ) -> dict[str, Any]:
-    state, resolved_date, videos, events = _filtered_dashboard_records(date)
+    state, resolved_date, videos, events = _filtered_dashboard_records(date, domain="pedestrian")
     pedestrian_tracks = _filtered_pedestrian_tracks(state, videos)
     samples, _first_seen_by_track = _build_analytics_samples(videos, events, pedestrian_tracks)
     observation_times = [sample["observedAt"] for sample in samples]
@@ -2902,9 +2925,10 @@ def dashboard_occlusion_trends(
 
 
 def dashboard_occlusion(date: Optional[str] = None, time_range: str = "whole-day") -> dict[str, Any]:
-    state, resolved_date, videos, _events = _filtered_dashboard_records(date)
+    state, resolved_date, videos, _events = _filtered_dashboard_records(date, domain="pedestrian")
     videos_by_id = {video["id"]: video for video in videos}
-    locations_by_id = {location["id"]: location for location in state["locations"]}
+    pedestrian_locations = _pedestrian_locations(state)
+    locations_by_id = {location["id"]: location for location in pedestrian_locations}
     pedestrian_tracks = _filtered_pedestrian_tracks(state, videos)
 
     sample_observations: list[dict[str, Any]] = []
@@ -2968,7 +2992,7 @@ def dashboard_occlusion(date: Optional[str] = None, time_range: str = "whole-day
     available_hours: set[str] = set()
     active_location_ids = _active_location_ids(videos)
     locations_payload = []
-    for location in state["locations"]:
+    for location in pedestrian_locations:
         mode = _location_ptsi_mode(location)
         walkable_area_m2 = _location_walkable_area_m2(location)
         roi_area_ratio = _location_roi_area_ratio(location)
@@ -3244,7 +3268,7 @@ def ai_synthesis(date: str, time_range: str) -> dict[str, Any]:
 def export_dashboard_report(date: str, time_range: str) -> Path:
     ensure_storage_layout()
 
-    state, _, videos, events = _filtered_dashboard_records(date)
+    state, _, videos, events = _filtered_dashboard_records(date, domain="pedestrian")
     pedestrian_tracks = _filtered_pedestrian_tracks(state, videos)
     _analytics_samples, first_seen_by_track = _build_analytics_samples(videos, events, pedestrian_tracks)
     summary = dashboard_summary(date)

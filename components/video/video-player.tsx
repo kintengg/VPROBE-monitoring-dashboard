@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { AlertCircle, MapPin, Users } from "lucide-react"
+import { AlertCircle, Car, MapPin, Users } from "lucide-react"
 import type { GateDirectionConfiguration, ROIConfiguration } from "@/lib/api"
 
 interface VideoPlayerProps {
@@ -9,6 +9,7 @@ interface VideoPlayerProps {
   location: string
   src?: string | null
   pedestrianCount: number
+  isVehicle?: boolean
   timestamp: string
   date: string
   isProcessed: boolean
@@ -59,6 +60,7 @@ export function VideoPlayer({
   location,
   src,
   pedestrianCount,
+  isVehicle = false,
   timestamp,
   date,
   isProcessed,
@@ -292,8 +294,8 @@ export function VideoPlayer({
           {location}
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1">
-          <Users className="h-3.5 w-3.5" />
-          {pedestrianCount} pedestrians
+          {isVehicle ? <Car className="h-3.5 w-3.5" /> : <Users className="h-3.5 w-3.5" />}
+          {pedestrianCount} {isVehicle ? "vehicles" : "pedestrians"}
         </span>
       </div>
     </div>

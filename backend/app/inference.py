@@ -70,13 +70,56 @@ def _module_is_within(path_value: Optional[str], root: Optional[Path]) -> bool:
         return False
 
 
+_ANNOTATOR_PATCHED = False
+
+
+def _patch_annotator_font_scale() -> None:
+    """Pin Ultralytics' Annotator font scale to match the RT-DETR pipeline.
+
+    Ultralytics auto-derives the cv2 label font scale from `line_width`
+    (sf = lw / 3), which produces oversized labels at line_width=3. The vehicle
+    annotator in Occlusion-Robust-RTDETR uses cv2.FONT_HERSHEY_SIMPLEX at
+    fontScale=0.4 / thickness=1; we match that here.
+    """
+    global _ANNOTATOR_PATCHED
+    if _ANNOTATOR_PATCHED:
+        return
+    try:
+        from ultralytics.utils import plotting as _plotting
+    except Exception:
+        return
+
+    annotator_cls = getattr(_plotting, "Annotator", None)
+    if annotator_cls is None or getattr(annotator_cls, "_alive_font_pinned", False):
+        _ANNOTATOR_PATCHED = True
+        return
+
+    original_init = annotator_cls.__init__
+
+    def patched_init(self, *args: Any, **kwargs: Any) -> None:  # type: ignore[no-redef]
+        original_init(self, *args, **kwargs)
+        # cv2 path scale + thickness; PIL path falls back to its own font but
+        # YOLO's default save callback uses cv2 for BGR videos.
+        self.sf = 0.6
+        self.tf = 1
+
+    annotator_cls.__init__ = patched_init  # type: ignore[method-assign]
+    annotator_cls._alive_font_pinned = True  # type: ignore[attr-defined]
+    _ANNOTATOR_PATCHED = True
+
+
 def resolve_model_path(model_name: Optional[str]) -> Optional[Path]:
     if not model_name:
         return None
 
-    candidate = store.MODELS_DIR / Path(model_name).name
-    if candidate.exists():
-        return candidate
+    name = Path(model_name).name
+    for candidate in (
+        store.MODELS_DIR / name,
+        store.MODELS_DIR / "vehicle" / name,
+        store.MODELS_DIR / "pedestrian" / name,
+    ):
+        if candidate.exists():
+            return candidate
     return None
 
 
@@ -627,6 +670,7 @@ def run_video_inference(
 
     _prefer_vendored_ultralytics()
     from ultralytics import YOLO
+    _patch_annotator_font_scale()
 
     save_name = (video_record or {}).get("id") or video_path.stem
     save_dir = store.PROCESSED_VIDEOS_DIR / save_name
@@ -645,6 +689,8 @@ def run_video_inference(
         "name": save_name,
         "exist_ok": True,
         "verbose": False,
+        # Match vehicle annotator (Occlusion-Robust-RTDETR uses border_thickness=3).
+        "line_width": 3,
     }
     if classes is not None:
         track_kwargs["classes"] = classes
