@@ -4,7 +4,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { cancelVideoUpload, getVideoUploadHistory, getVideoUploadStatus, uploadVideo, type VideoUploadStatus } from "@/lib/api"
 import { WalkingLoader } from "@/components/ui/walking-loader"
 
-const MAX_CONCURRENT_UPLOADS = 2
+const DEFAULT_MAX_CONCURRENT_UPLOADS = 2
+const MIN_CONCURRENT_UPLOADS = 1
+const MAX_CONCURRENT_UPLOADS = 16
+const MAX_CONCURRENT_UPLOADS_STORAGE_KEY = "alive-max-concurrent-uploads"
 const UPLOAD_QUEUE_STORAGE_KEY = "alive-upload-queue"
 const REHYDRATION_POLL_INTERVAL_MS = 1_000
 
@@ -67,6 +70,7 @@ interface UploadQueueContextValue {
   hasActiveUploads: boolean
   settledUploadsVersion: number
   maxConcurrentUploads: number
+  setMaxConcurrentUploads: (value: number) => void
 }
 
 const UploadQueueContext = createContext<UploadQueueContextValue | null>(null)
@@ -358,6 +362,7 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
   const [uploads, setUploads] = useState<UploadQueueItem[]>([])
   const [overlayDismissed, setOverlayDismissed] = useState(false)
   const [settledUploadsVersion, setSettledUploadsVersion] = useState(0)
+  const [maxConcurrentUploads, setMaxConcurrentUploadsState] = useState(DEFAULT_MAX_CONCURRENT_UPLOADS)
   const uploadsRef = useRef<UploadQueueItem[]>([])
   const launchingIdsRef = useRef(new Set<string>())
   const settledIdsRef = useRef(new Set<string>())
@@ -422,6 +427,32 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    const rawValue = window.localStorage.getItem(MAX_CONCURRENT_UPLOADS_STORAGE_KEY)
+    if (!rawValue) {
+      return
+    }
+
+    const parsedValue = Number.parseInt(rawValue, 10)
+    if (!Number.isFinite(parsedValue)) {
+      return
+    }
+
+    setMaxConcurrentUploadsState(Math.max(MIN_CONCURRENT_UPLOADS, Math.min(MAX_CONCURRENT_UPLOADS, parsedValue)))
+  }, [])
+
+  useEffect(() => {
+    if (!hasHydratedRef.current || typeof window === "undefined") {
+      return
+    }
+
+    window.localStorage.setItem(MAX_CONCURRENT_UPLOADS_STORAGE_KEY, String(maxConcurrentUploads))
+  }, [maxConcurrentUploads])
+
+  useEffect(() => {
+    if (!hasHydratedRef.current || typeof window === "undefined") {
+      return
+    }
+
     if (uploads.length === 0) {
       window.localStorage.removeItem(UPLOAD_QUEUE_STORAGE_KEY)
       return
@@ -451,6 +482,15 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
     setUploads((currentUploads) =>
       currentUploads.map((upload) => (upload.id === queueItemId ? updater(upload) : upload)),
     )
+  }, [])
+
+  const setMaxConcurrentUploads = useCallback((value: number) => {
+    if (!Number.isFinite(value)) {
+      return
+    }
+
+    const normalizedValue = Math.round(value)
+    setMaxConcurrentUploadsState(Math.max(MIN_CONCURRENT_UPLOADS, Math.min(MAX_CONCURRENT_UPLOADS, normalizedValue)))
   }, [])
 
   useEffect(() => {
@@ -611,7 +651,7 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const activeUploads = uploads.filter((upload) => upload.startedAt && !isTerminalState(upload.state)).length
-    const availableSlots = MAX_CONCURRENT_UPLOADS - activeUploads
+    const availableSlots = maxConcurrentUploads - activeUploads
     if (availableSlots <= 0) {
       return
     }
@@ -631,7 +671,7 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
         launchingIdsRef.current.delete(upload.id)
       })
     })
-  }, [runUpload, uploads])
+  }, [maxConcurrentUploads, runUpload, uploads])
 
   useEffect(() => {
     if (uploads.some((upload) => !isTerminalState(upload.state))) {
@@ -743,9 +783,22 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
       terminalCount,
       hasActiveUploads: activeCount > 0,
       settledUploadsVersion,
-      maxConcurrentUploads: MAX_CONCURRENT_UPLOADS,
+      maxConcurrentUploads,
+      setMaxConcurrentUploads,
     }),
-    [activeCount, cancelUpload, clearHistory, completedCount, enqueueUploads, queuedCount, settledUploadsVersion, sortedUploads, terminalCount],
+    [
+      activeCount,
+      cancelUpload,
+      clearHistory,
+      completedCount,
+      enqueueUploads,
+      maxConcurrentUploads,
+      queuedCount,
+      setMaxConcurrentUploads,
+      settledUploadsVersion,
+      sortedUploads,
+      terminalCount,
+    ],
   )
 
   return (

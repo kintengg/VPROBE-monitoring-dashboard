@@ -39,23 +39,23 @@ export function QueueUploadZone({ activeCount, queuedCount, completedCount, maxC
           </div>
         </div>
 
-        <div className="flex flex-col items-start gap-4 lg:items-end">
+        <div className="flex w-full flex-col items-start gap-4 lg:w-auto lg:items-end">
           <Button asChild className="rounded-2xl px-5">
             <Link href={uploadHref}>
               Open Surveillance
             </Link>
           </Button>
 
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="min-w-[92px] rounded-2xl border border-border bg-secondary/60 px-3 py-2">
+          <div className="grid w-full grid-cols-2 gap-2 text-center sm:grid-cols-3 lg:w-auto">
+            <div className="min-w-0 rounded-2xl border border-border bg-secondary/60 px-3 py-2">
               <p className="text-[11px] text-muted-foreground">Active</p>
               <p className="text-xl font-semibold text-white">{activeCount}</p>
             </div>
-            <div className="min-w-[92px] rounded-2xl border border-border bg-secondary/60 px-3 py-2">
+            <div className="min-w-0 rounded-2xl border border-border bg-secondary/60 px-3 py-2">
               <p className="text-[11px] text-muted-foreground">Queued</p>
               <p className="text-xl font-semibold text-white">{queuedCount}</p>
             </div>
-            <div className="min-w-[92px] rounded-2xl border border-border bg-secondary/60 px-3 py-2">
+            <div className="col-span-2 min-w-0 rounded-2xl border border-border bg-secondary/60 px-3 py-2 sm:col-span-1">
               <p className="text-[11px] text-muted-foreground">Completed</p>
               <p className="text-xl font-semibold text-white">{completedCount}</p>
             </div>
