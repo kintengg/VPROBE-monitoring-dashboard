@@ -23,12 +23,12 @@ export function VehicleClassBreakdown({ rows }: VehicleClassBreakdownProps) {
   const total = rows.reduce((acc, r) => acc + r.count, 0)
 
   return (
-    <Card className="bg-secondary/30 border-border/60">
+    <Card className="h-full flex flex-col rounded-3xl border border-border bg-card shadow-elevated">
       <CardHeader>
         <CardTitle className="text-base">Class breakdown</CardTitle>
         <CardDescription>Detected vehicle classes (PCE-weighted)</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1 overflow-auto">
         {rows.length === 0 || total === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
             <Car className="mb-2 h-6 w-6" />

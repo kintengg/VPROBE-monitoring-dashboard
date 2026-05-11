@@ -85,7 +85,7 @@ export function VehicleGateMap({
   // Initialize map once leaflet is ready
   useEffect(() => {
     if (!leaflet || !containerRef.current || mapRef.current) return
-    const map = leaflet.map(containerRef.current).fitBounds(CAMPUS_BOUNDS)
+    const map = leaflet.map(containerRef.current, { minZoom: 14 }).fitBounds(CAMPUS_BOUNDS)
     leaflet
       .tileLayer(TILE_LAYER_URL, { attribution: TILE_LAYER_ATTRIBUTION, maxZoom: 19 })
       .addTo(map)

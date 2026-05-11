@@ -506,6 +506,8 @@ export interface VehicleTrafficResponse {
   series: ({ id: string; time: string } & Record<string, string | number | null>)[]
 }
 
+export type TrafficByLocationResponse = Omit<TrafficResponse, "locationTotals">
+
 export interface CountingConfigList {
   options: string[]
   defaultConfig: string | null
@@ -806,11 +808,54 @@ export function getDashboardSummary(date?: string) {
   return request<DashboardSummary>(withQuery("/api/dashboard/summary", { date }))
 }
 
-export function getDashboardTraffic(date?: string, timeRange = "whole-day", focusTime?: string, zoomLevel = 0) {
+export function getDashboardTraffic(
+  date?: string,
+  timeRange = "whole-day",
+  focusTime?: string,
+  zoomLevel = 0,
+  startTime?: string,
+  locationId?: string,
+) {
   return request<TrafficResponse>(withQuery("/api/dashboard/traffic", {
     date,
     timeRange,
     focusTime,
+    startTime,
+    locationId,
+    zoomLevel: zoomLevel > 0 ? String(zoomLevel) : undefined,
+  }))
+}
+
+export function getDashboardTrafficByLocation(
+  date?: string,
+  timeRange = "whole-day",
+  focusTime?: string,
+  zoomLevel = 0,
+  startTime?: string,
+) {
+  return request<TrafficByLocationResponse>(withQuery("/api/dashboard/traffic-by-location", {
+    date,
+    timeRange,
+    focusTime,
+    startTime,
+    zoomLevel: zoomLevel > 0 ? String(zoomLevel) : undefined,
+  }))
+}
+
+export function getDashboardLOS(
+  date?: string,
+  timeRange = "whole-day",
+  focusTime?: string,
+  zoomLevel = 0,
+  locationId?: string,
+  startTime?: string,
+) {
+  return request<TrafficResponse>(withQuery("/api/dashboard/los", {
+    date,
+    timeRange,
+    focusTime,
+    startTime,
+    locationId,
     zoomLevel: zoomLevel > 0 ? String(zoomLevel) : undefined,
   }))
 }

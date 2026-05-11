@@ -54,7 +54,7 @@ export function VehicleKpiCards({ summary }: VehicleKpiCardsProps) {
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {cards.map((card) => (
-        <Card key={card.label} className="bg-secondary/30 border-border/60">
+        <Card key={card.label} className="rounded-3xl border border-border bg-card shadow-elevated">
           <CardContent className="p-4">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
               <span className="uppercase tracking-wider">{card.label}</span>
