@@ -1509,7 +1509,12 @@ def _filtered_dashboard_records(
 ) -> tuple[dict[str, Any], str, list[dict[str, Any]], list[dict[str, Any]]]:
     state = load_state()
     resolved_date = _resolve_dashboard_date(state["videos"], date)
-    videos = [video for video in state["videos"] if video.get("date") == resolved_date]
+    if date:
+        # Explicit date: filter to that day only.
+        videos = [video for video in state["videos"] if video.get("date") == resolved_date]
+    else:
+        # No date specified ("All dates"): aggregate across every video in the store.
+        videos = list(state["videos"])
     if domain:
         location_domains = {
             loc["id"]: (loc.get("domain") or "pedestrian")
@@ -2866,6 +2871,23 @@ def dashboard_traffic(
     state, resolved_date, videos, events = _filtered_dashboard_records(date, domain="pedestrian")
     pedestrian_tracks = _filtered_pedestrian_tracks(state, videos)
     samples, first_seen_by_track = _build_analytics_samples(videos, events, pedestrian_tracks)
+
+    if not date:
+        # "All dates" mode: collapse multi-day samples to a single canonical day so the
+        # hour-of-day bucket plan can aggregate across dates. Without this the bucket
+        # window is anchored to one date and events from other days are dropped.
+        anchor_day = datetime.strptime(resolved_date, "%Y-%m-%d")
+        def _project(value: datetime) -> datetime:
+            return anchor_day.replace(
+                hour=value.hour, minute=value.minute, second=value.second, microsecond=value.microsecond,
+            )
+        for sample in samples:
+            sample["observedAt"] = _project(sample["observedAt"])
+        first_seen_by_track = {
+            track_key: (_project(observed_at), location)
+            for track_key, (observed_at, location) in first_seen_by_track.items()
+        }
+
     observation_times = [sample["observedAt"] for sample in samples]
     if not observation_times:
         observation_times = [timestamp for timestamp in (_observation_time(video) for video in videos) if timestamp is not None]

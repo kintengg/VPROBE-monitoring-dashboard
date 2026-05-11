@@ -56,7 +56,13 @@ def list_vehicle_events(date: Optional[str] = None, gate_id: Optional[str] = Non
     state = store.load_state()
     events = [event for event in state.get("events", []) if _is_vehicle_event(event)]
     if date:
-        events = [event for event in events if str(event.get("date") or "")[:10] == date]
+        # Events don't carry their own date — join through the parent video.
+        matching_video_ids = {
+            video["id"]
+            for video in state.get("videos", [])
+            if str(video.get("date") or "")[:10] == date
+        }
+        events = [event for event in events if event.get("videoId") in matching_video_ids]
     if gate_id:
         target = gate_registry.get_gate(gate_id)
         if target is None:
@@ -64,7 +70,9 @@ def list_vehicle_events(date: Optional[str] = None, gate_id: Optional[str] = Non
         normalized = target["normalizedName"]
         events = [
             event for event in events
-            if gate_registry.normalize_gate_name(event.get("gateName") or event.get("locationName") or "") == normalized
+            if gate_registry.normalize_gate_name(
+                event.get("gateName") or event.get("locationName") or event.get("location") or ""
+            ) == normalized
         ]
     return events
 
@@ -219,20 +227,31 @@ def vehicle_traffic_series(date: Optional[str] = None, bucket_minutes: int = 60)
     events = list_vehicle_events(date)
     if not events:
         return []
+    state = store.load_state()
+    video_start_by_id = {
+        str(video.get("id")): str(video.get("startTime") or video.get("timestamp") or "")
+        for video in state.get("videos", [])
+    }
     bucket_minutes = max(1, int(bucket_minutes))
     buckets: dict[str, dict[str, Any]] = {}
     for event in events:
         offset_seconds = event.get("offsetSeconds") or 0
-        clock = event.get("clockTime") or event.get("startTime") or "00:00"
+        clock = (
+            event.get("clockTime")
+            or event.get("startTime")
+            or video_start_by_id.get(str(event.get("videoId")))
+            or event.get("timestamp")
+            or "00:00"
+        )
         try:
-            hours, minutes = clock.split(":")[:2]
+            hours, minutes = str(clock).split(":")[:2]
             total_minutes = int(hours) * 60 + int(minutes) + (int(offset_seconds) // 60)
         except (TypeError, ValueError):
             continue
         bucket_index = (total_minutes // bucket_minutes) * bucket_minutes
         bucket_key = f"{bucket_index // 60:02d}:{bucket_index % 60:02d}"
         bucket = buckets.setdefault(bucket_key, {"id": bucket_key, "time": bucket_key, "In": 0, "Out": 0})
-        gate_name = event.get("gateName") or event.get("locationName") or ""
+        gate_name = event.get("gateName") or event.get("locationName") or event.get("location") or ""
         flow_group = gate_registry.flow_group_from_name(gate_name)
         if flow_group:
             bucket[flow_group] = int(bucket.get(flow_group, 0)) + 1
