@@ -29,6 +29,7 @@ tsconfig.tsbuildinfo
 .venv/
 venv/
 __pycache__/
+backend/**/__pycache__/
 *.py[cod]
 *$py.class
 .python-version

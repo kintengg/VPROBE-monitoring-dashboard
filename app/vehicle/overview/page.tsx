@@ -255,7 +255,7 @@ export default function VehicleSurveillancePage() {
           locationName: locations.find((location) => location.id === upload.locationId)?.name ?? "Unknown location",
           domain: "vehicle",
           endTime: upload.startTime, // Sourced modal does not collect endTime
-          fastMode: false,
+          fastMode: upload.showLivePreview ?? false,
         },
       ])
     } catch (error) {

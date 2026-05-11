@@ -94,8 +94,27 @@ def class_breakdown(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def per_gate_los(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Aggregate detections per gate, compute V/C and LOS using gate defaults."""
     gates = gate_registry.list_gates()
+    locations = store.load_state().get("locations", [])
     rows: list[dict[str, Any]] = []
     for gate in gates:
+        location_override = next(
+            (
+                loc
+                for loc in locations
+                if loc.get("id") == gate["id"]
+                or gate_registry.normalize_gate_name(loc.get("name") or "") == gate["normalizedName"]
+            ),
+            None,
+        )
+        road_length_km = gate.get("defaultRoadLengthKm", 0.0)
+        lane_count = gate.get("defaultLaneCount")
+        if location_override is not None:
+            road_length_m = location_override.get("roadLengthM")
+            if isinstance(road_length_m, (int, float)) and road_length_m > 0:
+                road_length_km = float(road_length_m) / 1000.0
+            lane_override = location_override.get("laneCount")
+            if isinstance(lane_override, (int, float)) and lane_override > 0:
+                lane_count = int(round(lane_override))
         gate_events = [
             event for event in events
             if gate_registry.normalize_gate_name(event.get("gateName") or event.get("locationName") or "")
@@ -103,8 +122,8 @@ def per_gate_los(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         ]
         counts = los_module.aggregate_class_counts(gate_events, class_field="vehicleClass")
         capacity = los_module.compute_capacity(
-            gate.get("defaultRoadLengthKm", 0.0),
-            int(gate.get("defaultLaneCount") or 0),
+            road_length_km,
+            int(lane_count or 0),
         )
         volume = los_module.compute_volume(counts)
         vc_ratio = los_module.compute_vc_ratio(counts, capacity) if capacity > 0 else None

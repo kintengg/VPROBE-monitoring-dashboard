@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { BantaySidebarLogo } from "@/components/bantay-sidebar-logo"
 import {
@@ -23,6 +23,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
 
   return (
     <aside className="flex h-full w-24 flex-col border-r border-sidebar-border bg-sidebar relative">
@@ -37,10 +38,14 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 flex flex-col items-center py-6 gap-3">
         {navItems.map((item) => {
+          const isVideo = pathname.startsWith("/video")
+          const isVehicleVideo = isVideo && searchParams.get("domain") === "vehicle"
+          const isPedestrianVideo = isVideo && searchParams.get("domain") !== "vehicle"
+
           const isActive = pathname === item.href ||
-            (item.href === "/pedestrian" && (pathname.startsWith("/pedestrian") || pathname.startsWith("/video") || pathname === "/search")) ||
+            (item.href === "/pedestrian" && (pathname.startsWith("/pedestrian") || isPedestrianVideo || pathname === "/search")) ||
             (item.href === "/queue" && pathname.startsWith("/queue")) ||
-            (item.href === "/vehicle" && pathname.startsWith("/vehicle")) ||
+            (item.href === "/vehicle" && (pathname.startsWith("/vehicle") || isVehicleVideo)) ||
             (item.href === "/models" && pathname.startsWith("/models"))
           return (
             <Link

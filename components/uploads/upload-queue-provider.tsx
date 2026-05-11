@@ -28,6 +28,9 @@ export interface EnqueuedUploadInput {
   endTime: string
   fastMode: boolean
   domain?: "pedestrian" | "vehicle"
+  countingConfig?: string
+  roadLengthM?: number
+  laneCount?: number
 }
 
 export interface UploadQueueItem {
@@ -42,6 +45,9 @@ export interface UploadQueueItem {
   startTime: string
   endTime: string
   fastMode: boolean
+  countingConfig: string | null
+  roadLengthM?: number
+  laneCount?: number
   uploadId: string | null
   state: UploadState
   progressPercent: number | null
@@ -152,6 +158,9 @@ function createQueuedItem(input: EnqueuedUploadInput): UploadQueueItem {
     startTime: input.startTime,
     endTime: input.endTime,
     fastMode: input.fastMode,
+    countingConfig: input.countingConfig ?? null,
+    roadLengthM: input.roadLengthM,
+    laneCount: input.laneCount,
     uploadId: null,
     state: "queued",
     progressPercent: 0,
@@ -187,6 +196,7 @@ function createUploadFromHistory(status: VideoUploadStatus): UploadQueueItem {
     startTime: status.startTime ?? "",
     endTime: status.endTime ?? "",
     fastMode: Boolean(status.fastMode),
+    countingConfig: null,
     uploadId: status.uploadId,
     state: status.state,
     progressPercent: typeof status.progressPercent === "number" ? status.progressPercent : null,
@@ -291,6 +301,7 @@ function restoreUpload(value: unknown): UploadQueueItem | null {
     startTime: upload.startTime,
     endTime: upload.endTime,
     fastMode: Boolean(upload.fastMode),
+    countingConfig: typeof upload.countingConfig === "string" ? upload.countingConfig : null,
     uploadId: typeof upload.uploadId === "string" ? upload.uploadId : null,
     state: upload.state,
     progressPercent: typeof upload.progressPercent === "number" ? upload.progressPercent : null,
@@ -345,17 +356,7 @@ function isMissingUploadStatusError(error: unknown) {
 }
 
 function sortUploadsForDisplay(left: UploadQueueItem, right: UploadQueueItem) {
-  const rank = (item: UploadQueueItem) => {
-    if (!isTerminalState(item.state)) return 0
-    if (item.state === "error") return 1
-    if (item.state === "cancelled") return 2
-    return 3
-  }
-
-  const rankDelta = rank(left) - rank(right)
-  if (rankDelta !== 0) return rankDelta
-
-  return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime()
+  return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
 }
 
 export function UploadQueueProvider({ children }: { children: ReactNode }) {
@@ -595,6 +596,9 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
           startTime: queuedUpload.startTime,
           endTime: queuedUpload.endTime,
           fastMode: queuedUpload.fastMode,
+          countingConfig: queuedUpload.countingConfig ?? undefined,
+          roadLengthM: queuedUpload.roadLengthM,
+          laneCount: queuedUpload.laneCount,
           onProgress: (status) => {
             updateUpload(queueItemId, (current) => applyStatusToUpload(current, status))
           },

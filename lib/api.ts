@@ -626,7 +626,14 @@ export function getMediaUrl(path?: string | null) {
   if (!path) return null
   if (/^https?:\/\//i.test(path)) return path
 
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`
+  // Strip any leading slashes, then remap backend/storage/ → storage/
+  // so the path aligns with the /storage static mount on the API server.
+  const normalizedInput = path.replace(/^\/+/, "")
+  const remappedPath = normalizedInput.startsWith("backend/storage/")
+    ? `storage/${normalizedInput.slice("backend/storage/".length)}`
+    : normalizedInput
+
+  const normalizedPath = remappedPath.startsWith("/") ? remappedPath : `/${remappedPath}`
   return `${API_BASE_URL}${normalizedPath}`
 }
 
@@ -693,6 +700,9 @@ export function uploadVideo(payload: {
   startTime: string
   endTime: string
   fastMode?: boolean
+  countingConfig?: string
+  roadLengthM?: number
+  laneCount?: number
   onProgress?: (status: VideoUploadStatus) => void
 }) {
   const formData = new FormData()
@@ -704,6 +714,15 @@ export function uploadVideo(payload: {
   formData.set("endTime", payload.endTime)
   formData.set("fastMode", String(Boolean(payload.fastMode)))
   formData.set("uploadId", uploadId)
+  if (payload.countingConfig) {
+    formData.set("countingConfig", payload.countingConfig)
+  }
+  if (payload.roadLengthM !== undefined) {
+    formData.set("roadLengthM", String(payload.roadLengthM))
+  }
+  if (payload.laneCount !== undefined) {
+    formData.set("laneCount", String(payload.laneCount))
+  }
 
   payload.onProgress?.({
     uploadId,

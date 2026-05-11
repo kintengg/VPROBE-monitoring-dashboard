@@ -1391,6 +1391,8 @@ def add_video(payload: dict[str, Any]) -> dict[str, Any]:
         "pedestrianCount": payload.get("pedestrianCount", 0),
         "rawPath": payload.get("rawPath"),
         "processedPath": payload.get("processedPath"),
+        "roadLengthM": payload.get("roadLengthM"),
+        "laneCount": payload.get("laneCount"),
     }
     state["videos"].append(record)
     save_state(state)

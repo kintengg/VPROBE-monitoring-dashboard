@@ -37,8 +37,16 @@ class VehicleInferenceError(RuntimeError):
     """Raised when RT-DETR subprocess exits non-zero or sidecars are missing."""
 
 
-def _resolve_counting_config(location_id: str) -> Optional[Path]:
-    """Look up the counting-config JSON associated with the seeded gate."""
+def _resolve_counting_config(location_id: str, counting_config_name: Optional[str]) -> Optional[Path]:
+    """Resolve counting-config JSON from an explicit name or seeded gate."""
+    if counting_config_name:
+        candidate = COUNTING_DIR / Path(counting_config_name).name
+        if candidate.exists():
+            return candidate
+        raise VehicleInferenceError(
+            f"Counting config '{counting_config_name}' not found in {COUNTING_DIR}"
+        )
+
     gate = gate_registry.get_gate(location_id)
     if gate is None:
         return None
@@ -272,10 +280,58 @@ def _vehicle_count_from_summary(summary_path: Path, csv_rows: list[dict[str, Any
     return len(csv_rows)
 
 
+def _reencode_to_h264(raw_path: Path, callback: Optional[VehicleProgressCallback] = None) -> Optional[Path]:
+    """Re-encode an OpenCV mp4v video to H.264 so browsers can play it.
+
+    Returns the path of the re-encoded file, or None if ffmpeg is unavailable
+    or the re-encode fails (the caller should fall back to the raw file).
+    """
+    import shutil as _shutil
+
+    ffmpeg = _shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+
+    h264_path = raw_path.with_stem(raw_path.stem + "_h264")
+    cmd = [
+        ffmpeg,
+        "-y",  # overwrite without asking
+        "-i", str(raw_path),
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-movflags", "+faststart",  # enables streaming / progressive download
+        "-an",  # strip audio (inference videos have none)
+        str(h264_path),
+    ]
+
+    _emit(callback, phase="finalizing", progressPercent=96,
+          message="Re-encoding output video to H.264 for browser playback…")
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=600,
+        )
+        if result.returncode != 0 or not h264_path.exists():
+            return None
+        # Replace the raw file with the re-encoded one and return the same path.
+        raw_path.unlink(missing_ok=True)
+        h264_path.rename(raw_path)
+        return raw_path
+    except Exception:
+        h264_path.unlink(missing_ok=True)
+        return None
+
+
 def run_vehicle_inference(
     video_path: Path,
     video_record: dict[str, Any],
     *,
+    counting_config_name: Optional[str] = None,
+    show_live_preview: bool = False,
     progress_callback: Optional[VehicleProgressCallback] = None,
 ) -> dict[str, Any]:
     """Run RT-DETR inference against a vehicle video.
@@ -289,7 +345,10 @@ def run_vehicle_inference(
 
     weights = _resolve_weights_path()
     config = _resolve_config_path()
-    counting_config = _resolve_counting_config(str(video_record.get("locationId") or ""))
+    counting_config = _resolve_counting_config(
+        str(video_record.get("locationId") or ""),
+        counting_config_name,
+    )
 
     output_dir = PROCESSED_VIDEOS_DIR / video_id
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -310,14 +369,25 @@ def run_vehicle_inference(
         str(video_path),
         "-o",
         str(output_video),
+        "-a",
+        "./inference_requirements/annotations/instances_train.json",
         "-d",
         _device_for_runtime(),
         "-t",
         DETECTION_THRESHOLD,
         "--tracking",
+        "--congestion",
+        "--road-length",
+        str(video_record.get("roadLengthM") or 0.0803),
+        "--lanes",
+        str(video_record.get("laneCount") or 2),
+        "--batch",
+        "32",
     ]
     if counting_config is not None:
         cmd.extend(["--counting-config", str(counting_config)])
+    if show_live_preview:
+        cmd.append("--display")
 
     _emit(
         progress_callback,
@@ -357,6 +427,11 @@ def run_vehicle_inference(
     track_events = _track_events_from_detections(detection_rows, video_id, video_record)
     events = track_events + crossing_events
     vehicle_count = len(track_events) if track_events else _vehicle_count_from_summary(summary_txt, csv_rows)
+
+    # Re-encode to H.264 so the browser's <video> element can play it.
+    # OpenCV's mp4v codec is not natively supported by most browsers.
+    if output_video.exists():
+        _reencode_to_h264(output_video, progress_callback)
 
     processed_relative: Optional[str] = None
     if output_video.exists():

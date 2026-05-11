@@ -325,6 +325,9 @@ async def upload_video(
     endTime: str = Form(...),
     fastMode: bool = Form(False),
     uploadId: Optional[str] = Form(None),
+    countingConfig: Optional[str] = Form(None),
+    roadLengthM: Optional[float] = Form(None),
+    laneCount: Optional[int] = Form(None),
 ) -> dict:
     target_location = next(
         (loc for loc in store.list_locations() if loc["id"] == locationId),
@@ -372,6 +375,8 @@ async def upload_video(
                 "startTime": startTime,
                 "endTime": endTime,
                 "rawPath": str(raw_target.relative_to(store.BACKEND_DIR)),
+                "roadLengthM": roadLengthM,
+                "laneCount": laneCount,
             }
         )
     except ValueError as exc:
@@ -418,6 +423,8 @@ async def upload_video(
                 vehicle_inference.run_vehicle_inference,
                 raw_target,
                 video,
+                counting_config_name=countingConfig,
+                show_live_preview=fastMode,  # fastMode doubles as live-preview flag for vehicle uploads
                 progress_callback=handle_processing_progress,
             )
             ensure_not_cancelled()

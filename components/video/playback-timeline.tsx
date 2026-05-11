@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import type { EventRecord, VideoSeverityBucket } from "@/lib/api"
 
 interface PlaybackTimelineProps {
@@ -16,11 +16,30 @@ interface PlaybackTimelineProps {
 
 type SeverityLevel = "neutral" | "light" | "moderate" | "heavy"
 
+type ZoomPresetId = "full" | "30m" | "10m" | "5m"
+
+const ZOOM_PRESETS: Array<{ id: ZoomPresetId; label: string; seconds: number | null }> = [
+  { id: "full", label: "Full", seconds: null },
+  { id: "30m", label: "30m", seconds: 30 * 60 },
+  { id: "10m", label: "10m", seconds: 10 * 60 },
+  { id: "5m", label: "5m", seconds: 5 * 60 },
+]
+
 const SEVERITY_STYLES: Record<SeverityLevel, { label: string; fill: string }> = {
-  neutral: { label: "Neutral", fill: "rgba(148, 163, 184, 0.12)" },
-  light: { label: "Light", fill: "rgba(250, 204, 21, 0.82)" },
-  moderate: { label: "Moderate", fill: "rgba(249, 115, 22, 0.84)" },
-  heavy: { label: "High", fill: "rgba(239, 68, 68, 0.86)" },
+  neutral: { label: "LOS A-B", fill: "rgba(16, 185, 129, 0.32)" },
+  light: { label: "LOS C", fill: "rgba(132, 204, 22, 0.4)" },
+  moderate: { label: "LOS D", fill: "rgba(245, 158, 11, 0.5)" },
+  heavy: { label: "LOS E-F", fill: "rgba(239, 68, 68, 0.58)" },
+}
+
+function losFromScore(score?: number | null): string | null {
+  if (typeof score !== "number" || !Number.isFinite(score)) return null
+  if (score < 15) return "LOS A"
+  if (score < 33) return "LOS B"
+  if (score < 50) return "LOS C"
+  if (score < 66) return "LOS D"
+  if (score < 85) return "LOS E"
+  return "LOS F"
 }
 
 function formatDuration(seconds: number) {
@@ -94,6 +113,12 @@ function severityRank(level: SeverityLevel) {
   return 0
 }
 
+function adaptiveTickStep(windowDurationSeconds: number) {
+  const target = Math.max(1, windowDurationSeconds / 6)
+  const candidates = [30, 60, 120, 300, 600, 900, 1800, 3600]
+  return candidates.find((candidate) => candidate >= target) ?? 3600
+}
+
 export function PlaybackTimeline({
   startTime,
   endTime,
@@ -104,8 +129,37 @@ export function PlaybackTimeline({
   searchMatchOffsets = [],
   onSeek,
 }: PlaybackTimelineProps) {
+  const [zoomPreset, setZoomPreset] = useState<ZoomPresetId>("full")
+  const [hoveredOffsetSeconds, setHoveredOffsetSeconds] = useState<number | null>(null)
   const safeDuration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0
   const safeCurrentTime = Math.max(0, Math.min(currentTimeSeconds, safeDuration || currentTimeSeconds))
+  const activeZoomConfig = ZOOM_PRESETS.find((preset) => preset.id === zoomPreset) ?? ZOOM_PRESETS[0]
+  const zoomWindowDuration = safeDuration > 0
+    ? Math.min(activeZoomConfig.seconds ?? safeDuration, safeDuration)
+    : 0
+  const zoomWindowStart = useMemo(() => {
+    if (!safeDuration || !zoomWindowDuration || zoomWindowDuration >= safeDuration) {
+      return 0
+    }
+
+    const maxStart = safeDuration - zoomWindowDuration
+    const centered = safeCurrentTime - (zoomWindowDuration / 2)
+    return Math.max(0, Math.min(centered, maxStart))
+  }, [safeCurrentTime, safeDuration, zoomWindowDuration])
+  const zoomWindowEnd = zoomWindowStart + zoomWindowDuration
+
+  const projectRangeIntoWindow = (startOffset: number, endOffset: number) => {
+    if (!zoomWindowDuration) return null
+
+    const clippedStart = Math.max(startOffset, zoomWindowStart)
+    const clippedEnd = Math.min(endOffset, zoomWindowEnd)
+    if (clippedEnd <= clippedStart) return null
+
+    return {
+      left: ((clippedStart - zoomWindowStart) / zoomWindowDuration) * 100,
+      width: ((clippedEnd - clippedStart) / zoomWindowDuration) * 100,
+    }
+  }
 
   const timedEvents = useMemo(
     () =>
@@ -120,27 +174,32 @@ export function PlaybackTimeline({
   )
 
   const summarizedSeverityBuckets = useMemo(() => {
-    if (!safeDuration || backendSeverityBuckets.length === 0) return []
+    if (!safeDuration || !zoomWindowDuration || backendSeverityBuckets.length === 0) return []
 
     return backendSeverityBuckets
       .map((bucket) => {
         const startOffset = clampOffset(bucket.startOffsetSeconds, safeDuration)
         const endOffset = clampOffset(bucket.endOffsetSeconds, safeDuration)
         if (endOffset <= startOffset) return null
+        const projected = projectRangeIntoWindow(startOffset, endOffset)
+        if (!projected) return null
 
         const scoreLabel = typeof bucket.score === "number" ? ` • score ${bucket.score.toFixed(1)}` : ""
         return {
-          left: (startOffset / safeDuration) * 100,
-          width: ((endOffset - startOffset) / safeDuration) * 100,
+          startOffset,
+          endOffset,
+          left: projected.left,
+          width: projected.width,
           severity: bucket.severity,
-          title: `${SEVERITY_STYLES[bucket.severity].label} severity${scoreLabel} • ${formatRangeLabel(startOffset, endOffset)}`,
+          score: typeof bucket.score === "number" ? bucket.score : null,
+          title: `${SEVERITY_STYLES[bucket.severity].label}${scoreLabel} • ${formatRangeLabel(startOffset, endOffset)}`,
         }
       })
-      .filter((bucket): bucket is { left: number; width: number; severity: SeverityLevel; title: string } => bucket !== null)
-  }, [backendSeverityBuckets, safeDuration])
+      .filter((bucket): bucket is { startOffset: number; endOffset: number; left: number; width: number; severity: SeverityLevel; score: number | null; title: string } => bucket !== null)
+  }, [backendSeverityBuckets, safeDuration, zoomWindowDuration, zoomWindowEnd, zoomWindowStart])
 
   const fallbackSeverityBuckets = useMemo(() => {
-    if (!safeDuration) return []
+    if (!safeDuration || !zoomWindowDuration) return []
 
     const classifiedEvents = timedEvents.filter(
       (event) => event.occlusionClass === 0 || event.occlusionClass === 1 || event.occlusionClass === 2,
@@ -149,10 +208,13 @@ export function PlaybackTimeline({
     if (classifiedEvents.length === 0) {
       return [
         {
+          startOffset: 0,
+          endOffset: safeDuration,
           left: 0,
           width: 100,
           severity: "neutral" as const,
-          title: `No severity samples • ${formatRangeLabel(0, safeDuration)}`,
+          score: null as number | null,
+          title: `No LOS samples • ${formatRangeLabel(0, safeDuration)}`,
         },
       ]
     }
@@ -185,65 +247,80 @@ export function PlaybackTimeline({
       mergedSegments.push({ ...segment })
     }
 
-    return mergedSegments.map((segment) => ({
-      left: (segment.startOffset / safeDuration) * 100,
-      width: ((segment.endOffset - segment.startOffset) / safeDuration) * 100,
-      severity: segment.severity,
-      title: `${SEVERITY_STYLES[segment.severity].label} severity • ${formatRangeLabel(segment.startOffset, segment.endOffset)}`,
-    }))
-  }, [safeDuration, timedEvents])
+    return mergedSegments
+      .map((segment) => {
+        const projected = projectRangeIntoWindow(segment.startOffset, segment.endOffset)
+        if (!projected) return null
+
+        return {
+          startOffset: segment.startOffset,
+          endOffset: segment.endOffset,
+          left: projected.left,
+          width: projected.width,
+          severity: segment.severity,
+          score: null as number | null,
+          title: `${SEVERITY_STYLES[segment.severity].label} • ${formatRangeLabel(segment.startOffset, segment.endOffset)}`,
+        }
+      })
+      .filter((segment): segment is { startOffset: number; endOffset: number; left: number; width: number; severity: SeverityLevel; score: number | null; title: string } => segment !== null)
+  }, [safeDuration, timedEvents, zoomWindowDuration, zoomWindowEnd, zoomWindowStart])
 
   const severityBuckets = summarizedSeverityBuckets.length > 0 ? summarizedSeverityBuckets : fallbackSeverityBuckets
 
-  const clusteredMarkers = useMemo(() => {
-    if (!safeDuration || timedEvents.length === 0) return []
+  const hoveredSeverity = useMemo(() => {
+    if (hoveredOffsetSeconds === null || severityBuckets.length === 0) {
+      return null
+    }
 
-    const mergeWindowSeconds = Math.max(2.5, safeDuration * 0.012)
-    const laneGap = mergeWindowSeconds * 1.2
-    const lanes = [-Infinity, -Infinity, -Infinity]
-    const rawClusters: Array<{ start: number; end: number; center: number; count: number; maxSeverity: SeverityLevel }> = []
+    return severityBuckets.find(
+      (bucket) => hoveredOffsetSeconds >= bucket.startOffset && hoveredOffsetSeconds <= bucket.endOffset,
+    ) ?? null
+  }, [hoveredOffsetSeconds, severityBuckets])
 
-    for (const event of timedEvents) {
+  const detectionBars = useMemo(() => {
+    if (!zoomWindowDuration || timedEvents.length === 0) return []
+
+    const windowedEvents = timedEvents.filter((event) => event.offsetSeconds >= zoomWindowStart && event.offsetSeconds <= zoomWindowEnd)
+    if (windowedEvents.length === 0) return []
+
+    const bySecond = new Map<number, { count: number; maxSeverity: SeverityLevel }>()
+    for (const event of windowedEvents) {
       const severity = severityFromOcclusion(event.occlusionClass)
-      const previous = rawClusters[rawClusters.length - 1]
-
-      if (previous && event.offsetSeconds - previous.end <= mergeWindowSeconds) {
-        previous.center = (previous.center * previous.count + event.offsetSeconds) / (previous.count + 1)
-        previous.end = event.offsetSeconds
-        previous.count += 1
-        if (severityRank(severity) > severityRank(previous.maxSeverity)) {
-          previous.maxSeverity = severity
-        }
+      const second = Math.floor(Math.max(0, event.offsetSeconds))
+      const existing = bySecond.get(second)
+      if (!existing) {
+        bySecond.set(second, { count: 1, maxSeverity: severity })
         continue
       }
 
-      rawClusters.push({
-        start: event.offsetSeconds,
-        end: event.offsetSeconds,
-        center: event.offsetSeconds,
-        count: 1,
-        maxSeverity: severity,
-      })
+      existing.count += 1
+      if (severityRank(severity) > severityRank(existing.maxSeverity)) {
+        existing.maxSeverity = severity
+      }
     }
 
-    return rawClusters.map((cluster, index) => {
-      let lane = lanes.findIndex((lastOffset) => cluster.center - lastOffset > laneGap)
-      if (lane === -1) {
-        lane = index % lanes.length
-      }
-      lanes[lane] = cluster.center
+    const bars = Array.from(bySecond.entries())
+      .sort((left, right) => left[0] - right[0])
+      .map(([second, summary]) => {
+        const center = second + 0.5
+        const clampedHeight = Math.min(22, 8 + (summary.count * 2))
+        return {
+          second,
+          center,
+          count: summary.count,
+          maxSeverity: summary.maxSeverity,
+          height: clampedHeight,
+          left: ((center - zoomWindowStart) / zoomWindowDuration) * 100,
+          title: `${formatDuration(second)}\n${summary.count} ${summary.count === 1 ? "event" : "events"}`,
+        }
+      })
+      .filter((bar) => bar.left >= 0 && bar.left <= 100)
 
-      return {
-        ...cluster,
-        lane,
-        left: (cluster.center / safeDuration) * 100,
-        title: `${formatRangeLabel(cluster.start, cluster.end)}\n${cluster.count} ${cluster.count === 1 ? "event" : "events"}`,
-      }
-    })
-  }, [safeDuration, timedEvents])
+    return bars
+  }, [timedEvents, zoomWindowDuration, zoomWindowEnd, zoomWindowStart])
 
   const searchClusters = useMemo(() => {
-    if (!safeDuration) return []
+    if (!safeDuration || !zoomWindowDuration) return []
 
     const offsets = Array.from(
       new Set(
@@ -251,7 +328,9 @@ export function PlaybackTimeline({
           .filter((offset): offset is number => Number.isFinite(offset))
           .map((offset) => clampOffset(offset, safeDuration)),
       ),
-    ).sort((left, right) => left - right)
+    )
+      .filter((offset) => offset >= zoomWindowStart && offset <= zoomWindowEnd)
+      .sort((left, right) => left - right)
 
     if (offsets.length === 0) return []
 
@@ -272,35 +351,49 @@ export function PlaybackTimeline({
 
     return rawClusters.map((cluster) => ({
       ...cluster,
-      left: (cluster.center / safeDuration) * 100,
-      widthPercent: Math.max((((cluster.end - cluster.start) || mergeWindowSeconds * 0.6) / safeDuration) * 100, 0.9),
+      left: ((cluster.center - zoomWindowStart) / zoomWindowDuration) * 100,
+      widthPercent: Math.max((((cluster.end - cluster.start) || mergeWindowSeconds * 0.6) / zoomWindowDuration) * 100, 0.9),
       title: `${formatRangeLabel(cluster.start, cluster.end)}\n${cluster.count} search ${cluster.count === 1 ? "match" : "matches"}`,
     }))
-  }, [safeDuration, searchMatchOffsets])
+  }, [safeDuration, searchMatchOffsets, zoomWindowDuration, zoomWindowEnd, zoomWindowStart])
 
   const hasSearchMatches = searchClusters.length > 0
 
   const markerOffsets = useMemo(() => {
-    if (!safeDuration) return []
+    if (!zoomWindowDuration) return []
 
-    return Array.from({ length: 5 }, (_, index) => {
-      const ratio = index / 4
-      const offset = safeDuration * ratio
-      return {
-        id: `timeline-marker-${index}-${offset.toFixed(3)}`,
-        offset,
-        label: (() => {
-          const startMinutes = parseClockMinutes(startTime)
-          if (startMinutes === null) {
-            return index === 4 ? endTime : formatDuration(offset)
+    const step = adaptiveTickStep(zoomWindowDuration)
+    const ticks: number[] = []
+    const startTick = Math.ceil(zoomWindowStart / step) * step
+    for (let tick = startTick; tick <= zoomWindowEnd; tick += step) {
+      ticks.push(tick)
+      if (ticks.length >= 8) break
+    }
+
+    if (ticks.length === 0 || ticks[0] !== zoomWindowStart) {
+      ticks.unshift(zoomWindowStart)
+    }
+    if (ticks[ticks.length - 1] !== zoomWindowEnd) {
+      ticks.push(zoomWindowEnd)
+    }
+
+    return ticks.map((offset, index) => ({
+      id: `timeline-marker-${index}-${offset.toFixed(3)}`,
+      label: (() => {
+        const startMinutes = parseClockMinutes(startTime)
+        if (startMinutes === null) {
+          if (Math.abs(offset - zoomWindowEnd) < 0.1) {
+            return endTime
           }
-          return formatClock(startMinutes + offset / 60)
-        })(),
-      }
-    })
-  }, [endTime, safeDuration, startTime])
+          return formatDuration(offset)
+        }
+        return formatClock(startMinutes + offset / 60)
+      })(),
+      leftPercent: ((offset - zoomWindowStart) / zoomWindowDuration) * 100,
+    }))
+  }, [endTime, startTime, zoomWindowDuration, zoomWindowEnd, zoomWindowStart])
 
-  const currentPosition = safeDuration ? (safeCurrentTime / safeDuration) * 100 : 0
+  const currentPosition = zoomWindowDuration ? ((safeCurrentTime - zoomWindowStart) / zoomWindowDuration) * 100 : 0
   const currentWallClock = (() => {
     const startMinutes = parseClockMinutes(startTime)
     if (startMinutes === null) return formatDuration(safeCurrentTime)
@@ -308,14 +401,21 @@ export function PlaybackTimeline({
   })()
 
   const handleSeek = (clientX: number, target: HTMLDivElement) => {
-    if (!safeDuration || !onSeek) return
+    if (!zoomWindowDuration || !onSeek) return
     const rect = target.getBoundingClientRect()
     const relativeX = Math.max(0, Math.min(clientX - rect.left, rect.width))
-    onSeek((relativeX / rect.width) * safeDuration)
+    onSeek(zoomWindowStart + ((relativeX / rect.width) * zoomWindowDuration))
+  }
+
+  const handleHover = (clientX: number, target: HTMLDivElement) => {
+    if (!zoomWindowDuration) return
+    const rect = target.getBoundingClientRect()
+    const relativeX = Math.max(0, Math.min(clientX - rect.left, rect.width))
+    setHoveredOffsetSeconds(zoomWindowStart + ((relativeX / rect.width) * zoomWindowDuration))
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card p-4 shadow-elevated-sm">
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-elevated-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-medium text-foreground">Playback Timeline</h3>
@@ -324,22 +424,49 @@ export function PlaybackTimeline({
             {hasSearchMatches ? " Search hits are highlighted in cyan." : ""}
           </p>
         </div>
-        <div className="text-right text-xs text-muted-foreground">
+        <div className="rounded-lg border border-border/70 bg-secondary/40 px-3 py-2 text-right text-xs text-muted-foreground">
           <p>{startTime} - {endTime}</p>
           <p className="mt-1 text-foreground">{currentWallClock}</p>
         </div>
       </div>
 
-      {safeDuration > 0 ? (
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">Zoom</span>
+        {ZOOM_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+              zoomPreset === preset.id
+                ? "border-primary bg-primary/15 text-primary"
+                : "border-border bg-secondary/40 text-muted-foreground hover:bg-secondary"
+            }`}
+            onClick={() => setZoomPreset(preset.id)}
+          >
+            {preset.label}
+          </button>
+        ))}
+        <span className="ml-auto rounded-full bg-secondary px-2.5 py-1 text-[11px] text-muted-foreground">
+          Window {formatDuration(zoomWindowStart)} - {formatDuration(zoomWindowEnd)}
+        </span>
+        {hoveredOffsetSeconds !== null && (
+          <span className="rounded-full border border-border bg-secondary/60 px-2.5 py-1 text-[11px] text-foreground">
+            Hover {formatDuration(hoveredOffsetSeconds)} • {hoveredSeverity ? (losFromScore(hoveredSeverity.score) ?? SEVERITY_STYLES[hoveredSeverity.severity].label) : "No LOS"}
+          </span>
+        )}
+      </div>
+
+      {safeDuration > 0 && zoomWindowDuration > 0 ? (
         <>
           <div
-            className="relative mb-2 h-14 overflow-hidden rounded-xl border border-border bg-secondary/70"
+            className="relative mb-2 h-16 cursor-pointer overflow-hidden rounded-xl border border-border bg-secondary/70"
             onClick={(event) => handleSeek(event.clientX, event.currentTarget)}
+            onMouseMove={(event) => handleHover(event.clientX, event.currentTarget)}
+            onMouseLeave={() => setHoveredOffsetSeconds(null)}
           >
             {severityBuckets.map((bucket) => (
               <div
-                key={`${bucket.left}-${bucket.severity}`}
-                title={bucket.title}
+                key={`${bucket.startOffset}-${bucket.endOffset}-${bucket.severity}`}
                 className="absolute inset-y-0"
                 style={{ left: `${bucket.left}%`, width: `${bucket.width}%`, backgroundColor: SEVERITY_STYLES[bucket.severity].fill }}
               />
@@ -351,7 +478,6 @@ export function PlaybackTimeline({
               <button
                 key={`search-${cluster.start}-${cluster.count}`}
                 type="button"
-                title={cluster.title}
                 aria-label={cluster.title}
                 className="absolute bottom-1 z-10 h-2 rounded-full border border-cyan-200/80 bg-cyan-400/65 shadow-[0_0_0_1px_rgba(34,211,238,0.12)]"
                 style={{ left: `${cluster.left}%`, width: `${cluster.widthPercent}%`, transform: "translateX(-50%)" }}
@@ -362,29 +488,28 @@ export function PlaybackTimeline({
               />
             ))}
 
-            {clusteredMarkers.map((marker) => {
-              const markerStyle = marker.maxSeverity === "heavy"
-                ? "bg-red-500/90"
-                : marker.maxSeverity === "moderate"
-                  ? "bg-orange-400/90"
-                  : marker.maxSeverity === "light"
-                    ? "bg-yellow-300/95"
-                    : "bg-violet-500/90"
+            {detectionBars.map((bar) => {
+              const markerStyle = bar.maxSeverity === "heavy"
+                ? "bg-red-500/95"
+                : bar.maxSeverity === "moderate"
+                  ? "bg-amber-500/95"
+                  : bar.maxSeverity === "light"
+                    ? "bg-lime-500/95"
+                    : "bg-emerald-500/95"
 
               return (
                 <button
-                  key={`marker-${marker.start}-${marker.end}-${marker.lane}`}
+                  key={`marker-${bar.second}`}
                   type="button"
-                  title={marker.title}
-                  aria-label={marker.title}
-                  className={`absolute z-20 h-4 w-1.5 -translate-x-1/2 rounded-[2px] shadow-sm transition-transform hover:scale-y-110 ${markerStyle}`}
+                  aria-label={bar.title}
+                  className={`absolute bottom-1 z-20 w-1.5 -translate-x-1/2 rounded-[2px] shadow-sm transition-transform hover:scale-y-110 ${markerStyle}`}
                   style={{
-                    left: `${marker.left}%`,
-                    top: `${8 + marker.lane * 12}px`,
+                    left: `${bar.left}%`,
+                    height: `${bar.height}px`,
                   }}
                   onClick={(event) => {
                     event.stopPropagation()
-                    onSeek?.(marker.center)
+                    onSeek?.(bar.second)
                   }}
                 />
               )
@@ -395,43 +520,46 @@ export function PlaybackTimeline({
             </div>
           </div>
 
-          <div
-            className="relative h-2 cursor-pointer rounded-full bg-secondary"
-            onClick={(event) => handleSeek(event.clientX, event.currentTarget)}
-          >
-            <div className="h-full rounded-full bg-primary/50" style={{ width: `${currentPosition}%` }} />
-          </div>
+          <input
+            type="range"
+            min={zoomWindowStart}
+            max={zoomWindowEnd}
+            step={0.1}
+            value={safeCurrentTime}
+            className="mt-1 h-2.5 w-full cursor-pointer accent-primary"
+            onChange={(event) => onSeek?.(Number(event.target.value))}
+          />
 
-          <div className="mt-3 flex justify-between gap-2 text-[10px] text-muted-foreground">
+          <div className="relative mt-3 h-4 text-[10px] text-muted-foreground">
             {markerOffsets.map((marker) => (
-              <span key={marker.id}>{marker.label}</span>
+              <span
+                key={marker.id}
+                className="absolute -translate-x-1/2 truncate"
+                style={{ left: `${marker.leftPercent}%`, maxWidth: "90px" }}
+              >
+                {marker.label}
+              </span>
             ))}
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted-foreground">
             <div className="flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-sm bg-yellow-300" />
-                Light
+                <span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />
+                LOS A-B
               </span>
               <span className="inline-flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-sm bg-orange-400" />
-                Moderate
+                <span className="h-2.5 w-2.5 rounded-sm bg-lime-500" />
+                LOS C
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-sm bg-amber-500" />
+                LOS D
               </span>
               <span className="inline-flex items-center gap-2">
                 <span className="h-2.5 w-2.5 rounded-sm bg-red-500" />
-                High
+                LOS E-F
               </span>
-              <span className="inline-flex items-center gap-2">
-                <span className="h-3 w-1.5 rounded-[2px] bg-violet-500" />
-                Event markers
-              </span>
-              {hasSearchMatches ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-2 w-4 rounded-full border border-cyan-200/80 bg-cyan-400/65" />
-                  AI search
-                </span>
-              ) : null}
             </div>
             <span>
               {formatDuration(safeCurrentTime)} / {formatDuration(safeDuration)}

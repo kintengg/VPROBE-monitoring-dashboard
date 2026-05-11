@@ -151,7 +151,7 @@ export function QueueItem({ upload, onCancelRequest }: QueueItemProps) {
             <div className="flex shrink-0 items-center gap-2">
               {upload.state === "complete" && upload.videoId ? (
                 <Button asChild variant="ghost" size="sm" className="h-8 rounded-xl px-2 text-accent hover:bg-accent/10 hover:text-accent">
-                  <Link href={`/video/${upload.videoId}`}>
+                  <Link href={`/video/${upload.videoId}?domain=${upload.domain}`}>
                     <Video className="h-4 w-4" />
                     Open
                   </Link>

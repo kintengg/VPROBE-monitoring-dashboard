@@ -14,15 +14,16 @@ interface VideoThumbnailProps {
   mediaUrl?: string | null
   rawPath?: string | null
   processedPath?: string | null
+  domain?: "pedestrian" | "vehicle"
 }
 
-export function VideoThumbnail({ id, label, location, timestamp, date, startTime, pedestrianCount, mediaUrl, rawPath, processedPath }: VideoThumbnailProps) {
+export function VideoThumbnail({ id, label, location, timestamp, date, startTime, pedestrianCount, mediaUrl, rawPath, processedPath, domain }: VideoThumbnailProps) {
   const statusLabel = rawPath ? "Uploaded" : "Sample"
   const previewLabel = processedPath ? "Processed view" : rawPath ? "Raw view" : "Preview unavailable"
 
   return (
     <Link
-      href={`/video/${id}`}
+      href={domain ? `/video/${id}?domain=${domain}` : `/video/${id}`}
       className="group relative rounded-2xl overflow-hidden bg-secondary border border-border hover:border-primary/50 transition-all shadow-elevated-sm"
       style={{ aspectRatio: "16/10" }}
     >
