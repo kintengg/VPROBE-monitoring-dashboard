@@ -43,8 +43,6 @@ export function Sidebar() {
       <nav className="flex-1 flex flex-col items-center py-6 gap-3">
         {navItems.map((item) => {
           const isVideo = pathname.startsWith("/video")
-          const isVehicleVideo = isVideo && searchParams.get("domain") === "vehicle"
-          const isPedestrianVideo = isVideo && searchParams.get("domain") !== "vehicle"
 
           const isActive = pathname === item.href ||
             (item.href === "/pedestrian" && (pathname.startsWith("/pedestrian") || pathname === "/search" || videoRouteMatchesPedestrian)) ||

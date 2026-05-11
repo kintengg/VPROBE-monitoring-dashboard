@@ -378,7 +378,7 @@ def run_vehicle_inference(
         "--tracking",
         "--congestion",
         "--road-length",
-        str(video_record.get("roadLengthM") or 0.0803),
+        str(float(video_record.get("roadLengthM") or 80.3) / 1000.0),
         "--lanes",
         str(video_record.get("laneCount") or 2),
         "--batch",
