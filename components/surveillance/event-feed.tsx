@@ -103,9 +103,9 @@ export function EventFeed({ filteredVideoId, events = [], loading = false, selec
           </div>
         ) : displayEvents.length > 0 ? (
           <div className="p-2 space-y-2">
-            {displayEvents.map((event) => (
+            {displayEvents.map((event, index) => (
               <EventCard
-                key={event.id}
+                key={`${event.id}-${index}`}
                 event={event}
                 active={selectedEventId === event.id}
                 interactive={Boolean(onEventSelect || event.videoId)}
@@ -146,7 +146,7 @@ function formatVehicleClassLabel(value: string) {
 }
 
 function resolveVehicleType(event: EventRecord) {
-  const backendLabel = (event.vehicleClass ?? "").trim()
+  const backendLabel = (event.vehicleClassLabel ?? "").trim()
   if (backendLabel) {
     return backendLabel
   }

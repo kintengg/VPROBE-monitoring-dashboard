@@ -109,6 +109,7 @@ class EventRecord(BaseModel):
     offsetSeconds: Optional[float] = None
     occlusionClass: Optional[int] = None
     vehicleClass: Optional[str] = None
+    vehicleClassLabel: Optional[str] = None
     gateName: Optional[str] = None
     trackId: Optional[int] = None
     direction: Optional[Literal["in", "out"]] = None

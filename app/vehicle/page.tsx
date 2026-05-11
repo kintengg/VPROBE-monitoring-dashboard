@@ -248,11 +248,15 @@ export default function VehicleDashboardPage() {
           <div>
             <h1 className="text-xl font-semibold text-white">Vehicle Dashboard</h1>
             <p className="text-xs text-muted-foreground">
-              Gate-level LOS, V/C, and class breakdown sourced from the vehicle pipeline.
+              Real-time vehicle tracking metrics
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3 flex-wrap justify-end">
+          <Button variant="outline" className="rounded-2xl" onClick={() => router.push("/vehicle/overview")}>
+            Open Overview
+          </Button>
+
           <FootageDatePicker
             value={selectedDate}
             onChange={handleDateChange}
@@ -304,20 +308,13 @@ export default function VehicleDashboardPage() {
             </SelectContent>
           </Select>
 
-          <Button variant="outline" className="rounded-2xl" onClick={() => router.push("/vehicle/overview")}>
-            Open Overview
-          </Button>
           <Button
             variant="outline"
-            size="sm"
+            className="rounded-2xl border-border px-4 text-foreground hover:bg-secondary"
             onClick={() => void refresh(selectedDate, timeRange, startTime, focusTime, zoomLevel, selectedGateId)}
             disabled={loading}
           >
-            {loading ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="mr-2 h-3.5 w-3.5" />
-            )}
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
         </div>

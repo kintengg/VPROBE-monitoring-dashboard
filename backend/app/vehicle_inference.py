@@ -358,6 +358,11 @@ def run_vehicle_inference(
     summary_txt = Path(sidecar_stem + "_summary.txt")
     detections_csv = Path(sidecar_stem + "_detections.csv")
 
+    # Form input + storage uses meters; RT-DETR's --road-length expects kilometers.
+    raw_road_length_m = video_record.get("roadLengthM")
+    road_length_m = float(raw_road_length_m) if isinstance(raw_road_length_m, (int, float)) and raw_road_length_m > 0 else 80.3
+    road_length_km = road_length_m / 1000.0
+
     cmd: list[str] = [
         sys.executable,
         str(INFER_SCRIPT),
@@ -378,7 +383,7 @@ def run_vehicle_inference(
         "--tracking",
         "--congestion",
         "--road-length",
-        str(float(video_record.get("roadLengthM") or 80.3) / 1000.0),
+        f"{road_length_km:.6f}",
         "--lanes",
         str(video_record.get("laneCount") or 2),
         "--batch",

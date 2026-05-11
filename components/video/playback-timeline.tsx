@@ -106,13 +106,6 @@ function severityFromOcclusion(occlusionClass?: number | null): SeverityLevel {
   return "neutral"
 }
 
-function severityRank(level: SeverityLevel) {
-  if (level === "heavy") return 3
-  if (level === "moderate") return 2
-  if (level === "light") return 1
-  return 0
-}
-
 function adaptiveTickStep(windowDurationSeconds: number) {
   const target = Math.max(1, windowDurationSeconds / 6)
   const candidates = [30, 60, 120, 300, 600, 900, 1800, 3600]
@@ -276,48 +269,6 @@ export function PlaybackTimeline({
       (bucket) => hoveredOffsetSeconds >= bucket.startOffset && hoveredOffsetSeconds <= bucket.endOffset,
     ) ?? null
   }, [hoveredOffsetSeconds, severityBuckets])
-
-  const detectionBars = useMemo(() => {
-    if (!zoomWindowDuration || timedEvents.length === 0) return []
-
-    const windowedEvents = timedEvents.filter((event) => event.offsetSeconds >= zoomWindowStart && event.offsetSeconds <= zoomWindowEnd)
-    if (windowedEvents.length === 0) return []
-
-    const bySecond = new Map<number, { count: number; maxSeverity: SeverityLevel }>()
-    for (const event of windowedEvents) {
-      const severity = severityFromOcclusion(event.occlusionClass)
-      const second = Math.floor(Math.max(0, event.offsetSeconds))
-      const existing = bySecond.get(second)
-      if (!existing) {
-        bySecond.set(second, { count: 1, maxSeverity: severity })
-        continue
-      }
-
-      existing.count += 1
-      if (severityRank(severity) > severityRank(existing.maxSeverity)) {
-        existing.maxSeverity = severity
-      }
-    }
-
-    const bars = Array.from(bySecond.entries())
-      .sort((left, right) => left[0] - right[0])
-      .map(([second, summary]) => {
-        const center = second + 0.5
-        const clampedHeight = Math.min(22, 8 + (summary.count * 2))
-        return {
-          second,
-          center,
-          count: summary.count,
-          maxSeverity: summary.maxSeverity,
-          height: clampedHeight,
-          left: ((center - zoomWindowStart) / zoomWindowDuration) * 100,
-          title: `${formatDuration(second)}\n${summary.count} ${summary.count === 1 ? "event" : "events"}`,
-        }
-      })
-      .filter((bar) => bar.left >= 0 && bar.left <= 100)
-
-    return bars
-  }, [timedEvents, zoomWindowDuration, zoomWindowEnd, zoomWindowStart])
 
   const searchClusters = useMemo(() => {
     if (!safeDuration || !zoomWindowDuration) return []
@@ -487,33 +438,6 @@ export function PlaybackTimeline({
                 }}
               />
             ))}
-
-            {detectionBars.map((bar) => {
-              const markerStyle = bar.maxSeverity === "heavy"
-                ? "bg-red-500/95"
-                : bar.maxSeverity === "moderate"
-                  ? "bg-amber-500/95"
-                  : bar.maxSeverity === "light"
-                    ? "bg-lime-500/95"
-                    : "bg-emerald-500/95"
-
-              return (
-                <button
-                  key={`marker-${bar.second}`}
-                  type="button"
-                  aria-label={bar.title}
-                  className={`absolute bottom-1 z-20 w-1.5 -translate-x-1/2 rounded-[2px] shadow-sm transition-transform hover:scale-y-110 ${markerStyle}`}
-                  style={{
-                    left: `${bar.left}%`,
-                    height: `${bar.height}px`,
-                  }}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onSeek?.(bar.second)
-                  }}
-                />
-              )
-            })}
 
             <div className="absolute inset-y-0 z-10 w-0.5 bg-accent" style={{ left: `${currentPosition}%` }}>
               <div className="absolute -top-1 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full border border-background bg-accent" />

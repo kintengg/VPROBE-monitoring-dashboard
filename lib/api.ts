@@ -254,6 +254,7 @@ export interface EventRecord {
   offsetSeconds?: number | null
   occlusionClass?: number | null
   vehicleClass?: string | null
+  vehicleClassLabel?: string | null
   gateName?: string | null
   trackId?: number | null
   direction?: "in" | "out" | null

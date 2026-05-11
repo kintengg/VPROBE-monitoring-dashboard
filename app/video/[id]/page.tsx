@@ -4,11 +4,14 @@ import { Suspense, use, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { VideoPlayer } from "@/components/video/video-player"
+import { VideoMetadata } from "@/components/video/video-metadata"
 import { PlaybackTimeline } from "@/components/video/playback-timeline"
 import { EventFeed } from "@/components/surveillance/event-feed"
 import { AISearchBar } from "@/components/surveillance/ai-search-bar"
 import { Button } from "@/components/ui/button"
-import { deleteVideo, getEvents, getLocations, getMediaUrl, getVideo, getVideoPlaybackPath, type EventRecord, type LocationRecord, type VideoDetailRecord, type VideoPedestrianTrackRecord, type VideoSeverityBucket } from "@/lib/api"
+import { Switch } from "@/components/ui/switch"
+import { AlertCircle, ArrowLeft, BarChart3, Car, Download, Footprints, Gauge, Loader2, LogIn, LogOut, OctagonAlert, Trash2, Users } from "lucide-react"
+import { deleteVideo, getEvents, getLocations, getMediaUrl, getVideo, getVideoPlaybackPath, hasValidEntryExitPointsConfiguration, type EventRecord, type LocationRecord, type VideoDetailRecord, type VideoPedestrianTrackRecord, type VideoSeverityBucket } from "@/lib/api"
 import { useSetVideoDomain } from "@/components/video-domain-context"
 
 type LOSLevel = "A" | "B" | "C" | "D" | "E" | "F"
@@ -148,14 +151,22 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const [durationSeconds, setDurationSeconds] = useState(0)
   const [portableTimelineRows, setPortableTimelineRows] = useState<PortableTimelineRow[]>([])
   const [deleting, setDeleting] = useState(false)
+  const [showROI, setShowROI] = useState(false)
+  const [showEntryExitPoints, setShowEntryExitPoints] = useState(false)
   const videoElementRef = useRef<HTMLVideoElement | null>(null)
   const seekTokenRef = useRef(0)
   const appliedQuerySeekRef = useRef("")
 
   const setVideoDomain = useSetVideoDomain()
+  // Read ?domain= from the URL as an initial hint so the sidebar highlights the right icon
+  // before videoLocation finishes loading. Falls through to the authoritative value once it arrives.
+  const queryDomain = searchParams.get("domain")
   useEffect(() => {
-    setVideoDomain(videoLocation?.domain ?? null)
-  }, [videoLocation?.domain, setVideoDomain])
+    const resolvedDomain =
+      videoLocation?.domain
+      ?? (queryDomain === "vehicle" || queryDomain === "pedestrian" ? queryDomain : null)
+    setVideoDomain(resolvedDomain)
+  }, [queryDomain, videoLocation?.domain, setVideoDomain])
 
   useEffect(() => {
     let cancelled = false
@@ -287,6 +298,71 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     }
   }, [id, video?.processedPath])
 
+  // Vehicle congestion timeline — parses _congestion.csv emitted by RT-DETR alongside the annotated mp4.
+  // Each row carries per-frame V/C ratio and LOS, matching what the in-video overlay displays.
+  const [vehicleCongestionRows, setVehicleCongestionRows] = useState<Array<{ offsetSeconds: number; vcRatio: number; los: LOSLevel }>>([])
+  useEffect(() => {
+    let cancelled = false
+
+    const loadCongestion = async () => {
+      const processedPath = video?.processedPath
+      if (!processedPath || videoLocation?.domain !== "vehicle") {
+        if (!cancelled) setVehicleCongestionRows([])
+        return
+      }
+
+      const congestionPath = processedPath.replace(/\.mp4$/i, "_congestion.csv")
+      const url = getMediaUrl(congestionPath)
+      if (!url) {
+        if (!cancelled) setVehicleCongestionRows([])
+        return
+      }
+
+      try {
+        const response = await fetch(url, { cache: "no-store" })
+        if (!response.ok) throw new Error(`Congestion fetch failed: ${response.status}`)
+        const text = await response.text()
+        const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0)
+        if (lines.length < 2) {
+          if (!cancelled) setVehicleCongestionRows([])
+          return
+        }
+        const header = lines[0].split(",").map((column) => column.trim())
+        const tsIndex = header.indexOf("timestamp")
+        const vcIndex = header.indexOf("vc_ratio")
+        const losIndex = header.indexOf("los")
+        if (tsIndex < 0 || losIndex < 0) {
+          if (!cancelled) setVehicleCongestionRows([])
+          return
+        }
+
+        const rows: Array<{ offsetSeconds: number; vcRatio: number; los: LOSLevel }> = []
+        for (let i = 1; i < lines.length; i += 1) {
+          // Cheap CSV split — the columns we read never contain commas.
+          const cells = lines[i].split(",")
+          const offsetSeconds = parseClockToSeconds(cells[tsIndex] ?? "")
+          const losValue = normalizeLos(cells[losIndex])
+          if (offsetSeconds === null || losValue === null) continue
+          const vcRatio = Number(cells[vcIndex])
+          rows.push({
+            offsetSeconds,
+            vcRatio: Number.isFinite(vcRatio) ? vcRatio : 0,
+            los: losValue,
+          })
+        }
+        rows.sort((left, right) => left.offsetSeconds - right.offsetSeconds)
+        if (!cancelled) setVehicleCongestionRows(rows)
+      } catch {
+        if (!cancelled) setVehicleCongestionRows([])
+      }
+    }
+
+    void loadCongestion()
+    return () => {
+      cancelled = true
+    }
+  }, [video?.processedPath, videoLocation?.domain])
+
   useEffect(() => {
     const eventId = searchParams.get("eventId") ?? undefined
     setSelectedEventId(eventId)
@@ -366,7 +442,9 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
         .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
         .join(" ")
 
-    const detectionEvents = orderedEvents.filter((event) => event.type === "detection")
+    const detectionEvents = orderedEvents.filter(
+      (event) => event.type === "detection" || event.type === "vehicle-detection" || event.type === "vehicle-track",
+    )
     const counts = new Map<string, number>()
 
     for (const event of detectionEvents) {
@@ -389,8 +467,8 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
 
     const uniqueVehicleTracks = new Set(
       detectionEvents
-        .map((event) => event.pedestrianId)
-        .filter((pedestrianId): pedestrianId is number => typeof pedestrianId === "number"),
+        .map((event) => (typeof event.trackId === "number" ? `v-${event.trackId}` : (typeof event.pedestrianId === "number" ? `p-${event.pedestrianId}` : null)))
+        .filter((id): id is string => id !== null),
     ).size
 
     return {
@@ -406,23 +484,33 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
       return trackWindows
     }
 
-    const windows = new Map<number, { start: number; end: number }>()
+    const windows = new Map<string | number, { start: number; end: number }>()
 
     for (const event of orderedEvents) {
-      if (event.type !== "detection" || typeof event.pedestrianId !== "number" || typeof event.offsetSeconds !== "number") {
-        continue
-      }
+      if (typeof event.offsetSeconds !== "number") continue
 
+      const isVehicleTrack = event.type === "vehicle-track" && typeof event.trackId === "number"
+      const isVehicleDetection = event.type === "vehicle-detection" && typeof event.trackId === "number"
+      const isPedestrianDetection = event.type === "detection" && typeof event.pedestrianId === "number"
+
+      if (!isVehicleTrack && !isVehicleDetection && !isPedestrianDetection) continue
+
+      const id: string | number = isPedestrianDetection
+        ? (event.pedestrianId as number)
+        : `v-${event.trackId}`
       const offset = Math.max(0, event.offsetSeconds)
-      const existingWindow = windows.get(event.pedestrianId)
+      const endOffset = isVehicleTrack && typeof event.lastOffsetSeconds === "number"
+        ? Math.max(offset, event.lastOffsetSeconds)
+        : offset
+      const existingWindow = windows.get(id)
 
       if (!existingWindow) {
-        windows.set(event.pedestrianId, { start: offset, end: offset })
+        windows.set(id, { start: offset, end: endOffset })
         continue
       }
 
       existingWindow.start = Math.min(existingWindow.start, offset)
-      existingWindow.end = Math.max(existingWindow.end, offset)
+      existingWindow.end = Math.max(existingWindow.end, endOffset)
     }
 
     return Array.from(windows.values()).map((window) => createPlaybackWindow(window.start, window.end))
@@ -496,6 +584,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
       sampledLos.push(losFromRollingDetections(countRecent(second)))
     }
 
+    // "Highest LOS" = most severe service grade observed (closest to F → highest rank score).
     const worst = sampledLos.reduce<LOSLevel | null>((acc, level) => (losScore(level) > losScore(acc) ? level : acc), null)
     const averageRank = sampledLos.reduce((sum, level) => sum + losScore(level), 0) / sampledLos.length
     const average: LOSLevel = averageRank < 0.5
@@ -518,7 +607,22 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     [currentTimeSeconds, timelineRowsBySecond],
   )
 
+  const isVehicleVideo = videoLocation?.domain === "vehicle"
+
   const trackedVehiclesSoFar = useMemo(() => {
+    if (isVehicleVideo) {
+      // For vehicle videos, count unique track IDs that have crossed the gate counting line
+      // (events of type "vehicle-detection") up to the current playback time, regardless of direction.
+      const crossedTrackIds = new Set<number>()
+      for (const event of orderedEvents) {
+        if (event.type !== "vehicle-detection") continue
+        if (typeof event.trackId !== "number") continue
+        if (typeof event.offsetSeconds !== "number" || event.offsetSeconds > currentTimeSeconds) continue
+        crossedTrackIds.add(event.trackId)
+      }
+      return crossedTrackIds.size
+    }
+
     const timelineValue = hasTimelineCountSignal
       ? activeTimelineRow?.totalPedestriansSoFar ?? activeTimelineRow?.cumulativeUniquePedestrians
       : null
@@ -527,32 +631,79 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     }
 
     return vehiclePlaybackWindows.reduce((count, window) => (window.start <= currentTimeSeconds ? count + 1 : count), 0)
-  }, [activeTimelineRow, currentTimeSeconds, hasTimelineCountSignal, vehiclePlaybackWindows])
+  }, [activeTimelineRow, currentTimeSeconds, hasTimelineCountSignal, isVehicleVideo, orderedEvents, vehiclePlaybackWindows])
 
-  const liveDetectedVehicles = useMemo(
-    () => {
-      const timelineValue = hasTimelineCountSignal
-        ? activeTimelineRow?.detectedNow ?? activeTimelineRow?.visiblePedestrians
-        : null
-      if (typeof timelineValue === "number" && Number.isFinite(timelineValue) && timelineValue >= 0) {
-        return Math.max(0, Math.round(timelineValue))
-      }
+  // Pedestrian-specific live count — how many tracks are visible at the current moment.
+  const liveDetectedPedestrians = useMemo(() => {
+    if (isVehicleVideo) return 0
+    const timelineValue = hasTimelineCountSignal
+      ? activeTimelineRow?.detectedNow ?? activeTimelineRow?.visiblePedestrians
+      : null
+    if (typeof timelineValue === "number" && Number.isFinite(timelineValue) && timelineValue >= 0) {
+      return Math.max(0, Math.round(timelineValue))
+    }
+    return vehiclePlaybackWindows.reduce(
+      (count, window) =>
+        currentTimeSeconds >= window.start && currentTimeSeconds <= window.end ? count + 1 : count,
+      0,
+    )
+  }, [activeTimelineRow, currentTimeSeconds, hasTimelineCountSignal, isVehicleVideo, vehiclePlaybackWindows])
 
-      return vehiclePlaybackWindows.reduce(
-        (count, window) => (currentTimeSeconds >= window.start && currentTimeSeconds <= window.end ? count + 1 : count),
-        0,
-      )
-    },
-    [activeTimelineRow, currentTimeSeconds, hasTimelineCountSignal, vehiclePlaybackWindows],
-  )
+  // Pedestrian entering / exiting counts derived from VideoDetailRecord.directionalEvents.
+  const directionalCounts = useMemo(() => {
+    if (isVehicleVideo) return { entering: 0, exiting: 0 }
+    let entering = 0
+    let exiting = 0
+    for (const event of video?.directionalEvents ?? []) {
+      if (!Number.isFinite(event.offsetSeconds) || event.offsetSeconds > currentTimeSeconds) continue
+      if (event.direction === "entering") entering += 1
+      else if (event.direction === "exiting") exiting += 1
+    }
+    return { entering, exiting }
+  }, [currentTimeSeconds, isVehicleVideo, video?.directionalEvents])
+
+  const hasLocationROI = Boolean(videoLocation?.roiCoordinates?.includePolygonsNorm?.length)
+  const hasEntryExitPoints = hasValidEntryExitPointsConfiguration(videoLocation?.entryExitPoints)
 
   const losSummary = useMemo(() => {
+    // Vehicle videos: derive LOS from the RT-DETR congestion sidecar so the tile
+    // matches the in-video annotation exactly.
+    if (isVehicleVideo && vehicleCongestionRows.length > 0) {
+      // Find the row at or just before the current playback time.
+      let activeRow = vehicleCongestionRows[0]
+      for (const row of vehicleCongestionRows) {
+        if (row.offsetSeconds > currentTimeSeconds) break
+        activeRow = row
+      }
+
+      // Restrict the highest/average aggregation to playback positions reached so far —
+      // so the values reflect what the viewer has actually seen.
+      const seenRows = vehicleCongestionRows.filter((row) => row.offsetSeconds <= currentTimeSeconds)
+      const aggregationRows = seenRows.length > 0 ? seenRows : vehicleCongestionRows
+
+      // "Highest LOS" = most severe service grade observed (closest to F → highest rank score).
+      const worst = aggregationRows.reduce<LOSLevel | null>(
+        (acc, row) => (losScore(row.los) > losScore(acc) ? row.los : acc),
+        null,
+      )
+      const avgRank = aggregationRows.reduce((sum, row) => sum + losScore(row.los), 0) / aggregationRows.length
+      const average: LOSLevel = avgRank < 0.5 ? "A"
+        : avgRank < 1.5 ? "B"
+        : avgRank < 2.5 ? "C"
+        : avgRank < 3.5 ? "D"
+        : avgRank < 4.5 ? "E"
+        : "F"
+
+      return { current: activeRow.los as LOSLevel | null, worst, average }
+    }
+
     if (portableTimelineRows.length > 0 && hasTimelineLosSignal) {
       const current = activeTimelineRow?.los ?? losFromScore(activeTimelineRow?.ptsiScore)
       const scoredLevels = portableTimelineRows
         .map((row) => row.los ?? losFromScore(row.ptsiScore))
         .filter((level): level is LOSLevel => level !== null)
 
+      // "Highest LOS" = most severe service grade observed (closest to F → highest rank score).
       const worst = scoredLevels.reduce<LOSLevel | null>((acc, level) => (losScore(level) > losScore(acc) ? level : acc), null)
 
       const scoredValues = portableTimelineRows
@@ -584,6 +735,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
       .map((bucket) => losFromScore(bucket.score))
       .filter((level): level is LOSLevel => level !== null)
 
+    // "Highest LOS" = most severe service grade observed (closest to F → highest rank score).
     const worst = scoredLevels.reduce<LOSLevel | null>((acc, level) => (losScore(level) > losScore(acc) ? level : acc), null)
 
     const scoredValues = buckets
@@ -600,8 +752,10 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     currentTimeSeconds,
     hasBackendLosSignal,
     hasTimelineLosSignal,
+    isVehicleVideo,
     portableTimelineRows,
     proxyLosSummary,
+    vehicleCongestionRows,
     video?.severitySummary?.buckets,
   ])
 
@@ -668,40 +822,75 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const effectiveDurationSeconds = durationSeconds > 0 ? durationSeconds : fallbackDurationSeconds
 
   const mediaUrl = video ? getMediaUrl(getVideoPlaybackPath(video)) : null
-  const metricTiles = [
-    {
-      icon: Car,
-      value: String(trackedVehiclesSoFar),
-      caption: "Total so far",
-      iconClassName: "bg-emerald-500 text-white ring-emerald-500/20",
-      valueClassName: "text-emerald-100 sm:text-foreground",
-      cardClassName: "border-emerald-400/30 bg-gradient-to-br from-emerald-500/18 via-green-500/10 to-transparent",
-    },
-    {
-      icon: Gauge,
-      value: formatLos(losSummary.current),
-      caption: "Current LOS",
-      iconClassName: "bg-violet-500/90 text-white ring-violet-500/20",
-      valueClassName: "text-foreground",
-      cardClassName: "border-violet-400/25 bg-gradient-to-br from-violet-500/12 via-fuchsia-500/8 to-transparent",
-    },
-    {
-      icon: OctagonAlert,
-      value: formatLos(losSummary.worst),
-      caption: "Worst LOS",
-      iconClassName: "bg-amber-500/90 text-white ring-amber-500/20",
-      valueClassName: "text-foreground",
-      cardClassName: "border-amber-400/25 bg-gradient-to-br from-amber-500/12 via-orange-500/8 to-transparent",
-    },
-    {
-      icon: BarChart3,
-      value: formatLos(losSummary.average),
-      caption: "Average LOS",
-      iconClassName: "bg-sky-500/90 text-white ring-sky-500/20",
-      valueClassName: "text-foreground",
-      cardClassName: "border-sky-400/25 bg-gradient-to-br from-sky-500/12 via-cyan-500/8 to-transparent",
-    },
-  ]
+  const metricTiles = isVehicleVideo
+    ? [
+        {
+          icon: Car,
+          value: String(trackedVehiclesSoFar),
+          caption: "Total Counts",
+          iconClassName: "bg-emerald-500 text-white ring-emerald-500/20",
+          valueClassName: "text-emerald-100 sm:text-foreground",
+          cardClassName: "border-emerald-400/30 bg-gradient-to-br from-emerald-500/18 via-green-500/10 to-transparent",
+        },
+        {
+          icon: Gauge,
+          value: formatLos(losSummary.current),
+          caption: "Current LOS",
+          iconClassName: "bg-violet-500/90 text-white ring-violet-500/20",
+          valueClassName: "text-foreground",
+          cardClassName: "border-violet-400/25 bg-gradient-to-br from-violet-500/12 via-fuchsia-500/8 to-transparent",
+        },
+        {
+          icon: OctagonAlert,
+          value: formatLos(losSummary.worst),
+          caption: "Highest LOS",
+          iconClassName: "bg-amber-500/90 text-white ring-amber-500/20",
+          valueClassName: "text-foreground",
+          cardClassName: "border-amber-400/25 bg-gradient-to-br from-amber-500/12 via-orange-500/8 to-transparent",
+        },
+        {
+          icon: BarChart3,
+          value: formatLos(losSummary.average),
+          caption: "Average LOS",
+          iconClassName: "bg-sky-500/90 text-white ring-sky-500/20",
+          valueClassName: "text-foreground",
+          cardClassName: "border-sky-400/25 bg-gradient-to-br from-sky-500/12 via-cyan-500/8 to-transparent",
+        },
+      ]
+    : [
+        {
+          icon: Users,
+          value: String(trackedVehiclesSoFar),
+          caption: "Total so far",
+          iconClassName: "bg-emerald-500 text-white ring-emerald-500/20",
+          valueClassName: "text-emerald-100 sm:text-foreground",
+          cardClassName: "border-emerald-400/30 bg-gradient-to-br from-emerald-500/18 via-green-500/10 to-transparent",
+        },
+        {
+          icon: Footprints,
+          value: String(liveDetectedPedestrians),
+          caption: "Detected now",
+          iconClassName: "bg-cyan-500 text-white ring-cyan-500/20",
+          valueClassName: "text-cyan-100 sm:text-foreground",
+          cardClassName: "border-cyan-400/30 bg-gradient-to-br from-cyan-500/20 via-sky-500/10 to-transparent",
+        },
+        {
+          icon: LogIn,
+          value: hasEntryExitPoints ? String(directionalCounts.entering) : "--",
+          caption: "Entering so far",
+          iconClassName: "bg-violet-500/90 text-white ring-violet-500/20",
+          valueClassName: "text-foreground",
+          cardClassName: "border-violet-400/25 bg-gradient-to-br from-violet-500/12 via-fuchsia-500/8 to-transparent",
+        },
+        {
+          icon: LogOut,
+          value: hasEntryExitPoints ? String(directionalCounts.exiting) : "--",
+          caption: "Exiting so far",
+          iconClassName: "bg-amber-500/90 text-white ring-amber-500/20",
+          valueClassName: "text-foreground",
+          cardClassName: "border-amber-400/25 bg-gradient-to-br from-amber-500/12 via-orange-500/8 to-transparent",
+        },
+      ]
 
   const requestSeek = (seconds: number) => {
     setCurrentTimeSeconds(Math.max(0, seconds))
@@ -767,12 +956,20 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
           <AlertCircle className="mx-auto mb-4 h-10 w-10 text-destructive" />
           <h1 className="text-xl font-semibold text-foreground">Unable to load this video</h1>
           <p className="mt-2 text-sm text-muted-foreground">{error ?? "The requested video could not be found."}</p>
-          <Link href="/" className="mt-4 inline-block">
-            <Button variant="outline" className="border-border text-foreground hover:bg-secondary">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to overview
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            className="mt-4 border-border text-foreground hover:bg-secondary"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back()
+              } else {
+                router.push("/")
+              }
+            }}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
         </div>
       </div>
     )
@@ -785,11 +982,20 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
           <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.history.length > 1) {
+                  router.back()
+                } else {
+                  router.push("/")
+                }
+              }}
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
             <div>
               <h1 className="text-xl font-semibold text-foreground">{video.location}</h1>
               <p className="text-sm text-muted-foreground">Video Feed #{id}</p>
@@ -838,14 +1044,16 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
               location={video.location}
               src={mediaUrl}
               pedestrianCount={video.pedestrianCount}
-              isVehicle={isVehicle}
+              isVehicle={isVehicleVideo}
               timestamp={video.timestamp}
               date={video.date}
               isProcessed={Boolean(video.processedPath)}
               videoRef={videoElementRef}
               requestedSeek={requestedSeek}
               roiCoordinates={videoLocation?.roiCoordinates ?? null}
-              showROI={false}
+              showROI={showROI}
+              entryExitPoints={hasEntryExitPoints ? (videoLocation?.entryExitPoints ?? null) : null}
+              showEntryExitPoints={showEntryExitPoints}
               onTimeUpdate={setCurrentTimeSeconds}
               onDurationChange={setDurationSeconds}
             />
@@ -871,18 +1079,59 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
             </div>
             
             {/* Playback Timeline */}
-              <div className="rounded-xl border border-border bg-card p-4">
-                <PlaybackTimeline
+            <PlaybackTimeline
+              startTime={video.startTime}
+              endTime={video.endTime}
+              durationSeconds={effectiveDurationSeconds}
+              currentTimeSeconds={currentTimeSeconds}
+              events={orderedEvents}
+              severityBuckets={playbackSeverityBuckets}
+              searchMatchOffsets={searchMatchOffsets}
+              onSeek={requestSeek}
+            />
+
+            {!isVehicleVideo && (
+              <>
+                <VideoMetadata
+                  date={video.date}
                   startTime={video.startTime}
                   endTime={video.endTime}
-                  durationSeconds={effectiveDurationSeconds}
-                  currentTimeSeconds={currentTimeSeconds}
-                  events={orderedEvents}
-                  searchMatchOffsets={searchMatchOffsets}
-                  onSeek={requestSeek}
+                  gpsLat={video.gpsLat}
+                  gpsLng={video.gpsLng}
+                  trackedPedestriansSoFar={trackedVehiclesSoFar}
+                  pedestrianCount={video.pedestrianCount}
                 />
-              </div>
-            
+
+                {(hasLocationROI || hasEntryExitPoints) && (
+                  <div className="space-y-3">
+                    {hasLocationROI && (
+                      <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 shadow-elevated-sm">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Show ROI Outline</p>
+                          <p className="text-xs text-muted-foreground">Display the stored walkable ROI polygons over the video for alignment debugging.</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-medium text-muted-foreground">{showROI ? "ON" : "OFF"}</span>
+                          <Switch checked={showROI} onCheckedChange={setShowROI} aria-label="Show ROI Outline" />
+                        </div>
+                      </div>
+                    )}
+                    {hasEntryExitPoints && (
+                      <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card/70 px-4 py-3 shadow-elevated-sm">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">Show ROI Outline (Entry/Exit Points)</p>
+                          <p className="text-xs text-muted-foreground">Display the stored directional gate strips over the video for alignment and counting debugging.</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-medium text-muted-foreground">{showEntryExitPoints ? "ON" : "OFF"}</span>
+                          <Switch checked={showEntryExitPoints} onCheckedChange={setShowEntryExitPoints} aria-label="Show ROI Outline (Entry/Exit Points)" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -891,7 +1140,8 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
       <aside className="w-80 border-l border-border bg-card flex flex-col h-full">
         <AISearchBar />
 
-        {/* Vehicle Class Summary */}
+        {/* Vehicle Class Summary — vehicle videos only */}
+        {isVehicleVideo && (
         <div className="border-b border-border p-4">
           <h4 className="mb-3 text-sm font-medium text-foreground">Vehicle Class Summary</h4>
           {vehicleClassSummary.totalDetections > 0 ? (
@@ -937,6 +1187,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
             <p className="text-sm text-muted-foreground">No detection events are available yet for class summarization.</p>
           )}
         </div>
+        )}
 
         <EventFeed
           filteredVideoId={id}

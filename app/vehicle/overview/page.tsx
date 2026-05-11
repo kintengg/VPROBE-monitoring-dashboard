@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   AlertCircle,
+  ArrowLeft,
   Calendar,
   Car,
   ChevronDown,
@@ -279,6 +280,15 @@ export default function VehicleSurveillancePage() {
       <div className="flex-1 flex flex-col">
         <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm">
           <div className="flex items-center gap-3 shrink-0 mr-6">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => router.push("/vehicle")}
+              aria-label="Back to Vehicle Dashboard"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/15 text-primary">
               <Car className="h-5 w-5" />
             </div>

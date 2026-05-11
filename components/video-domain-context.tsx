@@ -25,11 +25,10 @@ export function useVideoDomain() {
   return ctx?.videoDomain ?? null
 }
 
-export function useSetVideoDomain(domain: VideoDomain) {
+export function useSetVideoDomain() {
   const ctx = useContext(VideoDomainContext)
   useEffect(() => {
-    if (!ctx) return
-    ctx.setVideoDomain(domain)
-    return () => ctx.setVideoDomain(null)
-  }, [ctx, domain])
+    return () => ctx?.setVideoDomain(null)
+  }, [ctx])
+  return ctx?.setVideoDomain ?? ((_: VideoDomain) => undefined)
 }

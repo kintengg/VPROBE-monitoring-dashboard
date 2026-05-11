@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Switch } from "@/components/ui/switch"
 import { FootageDatePicker } from "@/components/ui/footage-date-picker"
-import { AlertCircle, Calendar, ChevronDown, Loader2, MapPin, Pencil, Plus, ScanLine, Trash2, Video } from "lucide-react"
+import { AlertCircle, ArrowLeft, Calendar, ChevronDown, Loader2, MapPin, Pencil, Plus, ScanLine, Trash2, Video } from "lucide-react"
 import {
   createLocation,
   deleteLocation,
@@ -256,7 +256,18 @@ export default function SurveillancePage() {
       <div className="flex-1 flex flex-col">
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card/50 backdrop-blur-sm">
-          <h1 className="text-xl font-semibold text-white shrink-0 mr-6">Pedestrian Surveillance Overview</h1>
+          <div className="flex items-center gap-3 shrink-0 mr-6">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => router.push("/pedestrian")}
+              aria-label="Back to Pedestrian Dashboard"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <h1 className="text-xl font-semibold text-white">Pedestrian Surveillance Overview</h1>
+          </div>
           
           <div className="flex items-center gap-3 flex-wrap justify-end">
             {/* Date Filter */}
