@@ -242,8 +242,10 @@ export default function VehicleSurveillancePage() {
     locationId: string
     date: string
     startTime: string
-    endTime: string
-    fastMode: boolean
+    roadLengthM?: number
+    laneCount?: number
+    countingConfig?: string
+    showLivePreview?: boolean
   }) => {
     try {
       setPageError(null)
@@ -252,6 +254,8 @@ export default function VehicleSurveillancePage() {
           ...upload,
           locationName: locations.find((location) => location.id === upload.locationId)?.name ?? "Unknown location",
           domain: "vehicle",
+          endTime: upload.startTime, // Sourced modal does not collect endTime
+          fastMode: false,
         },
       ])
     } catch (error) {
@@ -387,7 +391,6 @@ export default function VehicleSurveillancePage() {
           ) : filteredLocations.length > 0 ? (
             <VideoGrid
               locations={filteredLocations}
-              detectionMode={detectionMode}
               onAddVideoClick={handleOpenAddVideo}
             />
           ) : (

@@ -996,3 +996,22 @@ export async function downloadDashboardReport(date: string, timeRange: string): 
     filename: filenameMatch?.[1] ?? `${date}-${timeRange}-dashboard-report.zip`,
   }
 }
+
+export const getCountingConfigChoices = getCountingConfigs
+
+export interface InferenceRequirementUploadResult {
+  filename: string
+}
+
+export type InferenceRequirementType = "counting-config" | "infer-config"
+
+export function uploadInferenceRequirement(payload: { file: File; requirementType: InferenceRequirementType }) {
+  const formData = new FormData()
+  formData.set("file", payload.file)
+  formData.set("requirementType", payload.requirementType)
+
+  return request<InferenceRequirementUploadResult>("/api/inference/requirements/upload", {
+    method: "POST",
+    body: formData,
+  })
+}

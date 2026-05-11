@@ -277,13 +277,28 @@ export default function VehicleDashboardPage() {
 
           {/* Start time selector */}
           <Select value={startTime} onValueChange={handleStartTimeChange}>
-            <SelectTrigger className="h-9 w-36 rounded-2xl border-border bg-secondary text-foreground">
+            <SelectTrigger className="h-9 w-32 rounded-2xl border-border bg-secondary text-foreground">
               <SelectValue placeholder="Start time" />
             </SelectTrigger>
             <SelectContent className="max-h-80 rounded-xl border-border bg-popover">
-              {START_TIME_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value} className="rounded-lg text-foreground">
-                  {opt.label}
+              {START_TIME_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value} className="rounded-lg text-foreground">
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Gate selector */}
+          <Select value={selectedGateId ?? "all"} onValueChange={(val) => setSelectedGateId(val === "all" ? null : val)}>
+            <SelectTrigger className="h-9 w-44 rounded-2xl border-border bg-secondary text-foreground truncate">
+              <SelectValue placeholder="Select gate" />
+            </SelectTrigger>
+            <SelectContent className="max-h-80 rounded-xl border-border bg-popover">
+              <SelectItem value="all" className="rounded-lg text-foreground">All Gates</SelectItem>
+              {gates.map((gate) => (
+                <SelectItem key={gate.id} value={gate.id} className="rounded-lg text-foreground">
+                  {gate.name}
                 </SelectItem>
               ))}
             </SelectContent>

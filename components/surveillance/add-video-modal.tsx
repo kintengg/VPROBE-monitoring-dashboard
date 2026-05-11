@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -19,234 +19,504 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { FileVideo, Upload, Video, X, Zap } from "lucide-react"
+import { FileVideo, Upload, Video, X } from "lucide-react"
+import { getCountingConfigChoices, uploadInferenceRequirement } from "@/lib/api"
+
+const LAST_COUNTING_CONFIG_STORAGE_KEY = "alive-last-counting-config"
+const LAST_VIDEO_FORM_VALUES_STORAGE_KEY = "alive-last-video-form-values"
+const LAST_GATE_LOS_VALUES_STORAGE_KEY = "alive-last-gate-los-values"
+
+const GATE_DEFAULT_LOS_VALUES: Record<string, { roadLengthM: number; laneCount: number }> = {
+  g2: { roadLengthM: 26.3, laneCount: 3 },
+  "g2.9": { roadLengthM: 60, laneCount: 2 },
+  g3: { roadLengthM: 45.3, laneCount: 3 },
+  "g3.2": { roadLengthM: 20, laneCount: 2 },
+  "g3.5": { roadLengthM: 20.6, laneCount: 1 },
+}
+
+const HOUR_OPTIONS = Array.from({ length: 12 }, (_, index) => {
+  const hour = index + 1
+  return { value: String(hour).padStart(2, "0"), label: String(hour) }
+})
+
+const MINUTE_SECOND_OPTIONS = Array.from({ length: 60 }, (_, index) => {
+  const value = String(index).padStart(2, "0")
+  return { value, label: value }
+})
+
+const MERIDIEM_OPTIONS = ["AM", "PM"] as const
+const MONTH_OPTIONS = [
+  { value: "01", label: "Jan" },
+  { value: "02", label: "Feb" },
+  { value: "03", label: "Mar" },
+  { value: "04", label: "Apr" },
+  { value: "05", label: "May" },
+  { value: "06", label: "Jun" },
+  { value: "07", label: "Jul" },
+  { value: "08", label: "Aug" },
+  { value: "09", label: "Sep" },
+  { value: "10", label: "Oct" },
+  { value: "11", label: "Nov" },
+  { value: "12", label: "Dec" },
+]
+const DAY_OPTIONS = Array.from({ length: 31 }, (_, index) => {
+  const day = String(index + 1).padStart(2, "0")
+  return { value: day, label: day }
+})
+const MIN_YEAR_OPTION = 2000
+const MAX_YEAR_OPTION = 2100
+const YEAR_OPTIONS = Array.from({ length: MAX_YEAR_OPTION - MIN_YEAR_OPTION + 1 }, (_, index) => {
+  const year = String(MIN_YEAR_OPTION + index)
+  return { value: year, label: year }
+})
+
+function inferGateSuffixFromLocation(locationName: string): string | null {
+  const normalizedLocation = locationName.toLowerCase().trim()
+  const compactLocation = normalizedLocation.replace(/[^a-z0-9.]+/g, "")
+
+  const hasGateKeyword = /\bgate\b/.test(normalizedLocation) || /\bgate\s*\d/.test(normalizedLocation) || compactLocation.startsWith("gate")
+  const hasGPrefix = /^g\d/.test(compactLocation)
+  if (!hasGateKeyword && !hasGPrefix) {
+    return null
+  }
+
+  let gateToken: string | null = null
+  if (hasGPrefix) {
+    const compactMatch = compactLocation.match(/^g(\d\.\d|\d{2}|\d)/)
+    gateToken = compactMatch?.[1] ?? null
+  }
+
+  if (!gateToken && hasGateKeyword) {
+    const gateMatch = normalizedLocation.match(/\bgate\s*(\d\.\d|\d{2}|\d)\b/)
+    gateToken = gateMatch?.[1] ?? null
+
+    if (!gateToken) {
+      const compactGateMatch = compactLocation.match(/gate(\d\.\d|\d{2}|\d)/)
+      gateToken = compactGateMatch?.[1] ?? null
+    }
+  }
+
+  if (!gateToken) {
+    return null
+  }
+
+  return {
+    "2": "g2",
+    "29": "g2.9",
+    "2.9": "g2.9",
+    "3": "g3",
+    "32": "g3.2",
+    "3.2": "g3.2",
+    "35": "g3.5",
+    "3.5": "g3.5",
+  }[gateToken] ?? null
+}
+
+function inferGateSuffixFromLocationId(locationId: string): string | null {
+  const normalized = locationId.trim().toLowerCase()
+  return {
+    "gate-2": "g2",
+    "gate-2-9": "g2.9",
+    "gate-3": "g3",
+    "gate-3-2": "g3.2",
+    "gate-3-5": "g3.5",
+  }[normalized] ?? null
+}
+
+function findGateMatchedCountingConfig(options: string[], locationName: string): string | null {
+  const suffix = inferGateSuffixFromLocation(locationName)
+  if (!suffix) {
+    return null
+  }
+
+  const expectedFileName = `counting_config_${suffix}.json`
+  const exact = options.find((option) => option.toLowerCase() === expectedFileName.toLowerCase())
+  if (exact) {
+    return exact
+  }
+
+  const escapedSuffix = suffix.replace(".", "\\.")
+  const suffixPattern = new RegExp(`(^|[^a-z0-9])${escapedSuffix}([^a-z0-9]|$)`, "i")
+  return options.find((option) => suffixPattern.test(option.toLowerCase())) ?? null
+}
+
+function composeTwentyFourHourTime(hour12: string, minute: string, second: string, meridiem: string) {
+  const parsedHour12 = Number(hour12)
+  if (!Number.isFinite(parsedHour12) || parsedHour12 < 1 || parsedHour12 > 12) {
+    return ""
+  }
+
+  const parsedMinute = Number(minute)
+  const parsedSecond = Number(second)
+  if (!Number.isFinite(parsedMinute) || parsedMinute < 0 || parsedMinute > 59) {
+    return ""
+  }
+  if (!Number.isFinite(parsedSecond) || parsedSecond < 0 || parsedSecond > 59) {
+    return ""
+  }
+
+  const normalizedMeridiem = meridiem === "PM" ? "PM" : meridiem === "AM" ? "AM" : ""
+  if (!normalizedMeridiem) {
+    return ""
+  }
+
+  const hour24 = normalizedMeridiem === "PM"
+    ? (parsedHour12 % 12) + 12
+    : parsedHour12 % 12
+
+  return `${String(hour24).padStart(2, "0")}:${String(parsedMinute).padStart(2, "0")}:${String(parsedSecond).padStart(2, "0")}`
+}
+
+function composeIsoDate(year: string, month: string, day: string) {
+  const parsedYear = Number(year)
+  const parsedMonth = Number(month)
+  const parsedDay = Number(day)
+  if (!Number.isInteger(parsedYear) || parsedYear < 1) {
+    return ""
+  }
+  if (!Number.isInteger(parsedMonth) || parsedMonth < 1 || parsedMonth > 12) {
+    return ""
+  }
+  if (!Number.isInteger(parsedDay) || parsedDay < 1 || parsedDay > 31) {
+    return ""
+  }
+
+  const candidate = new Date(parsedYear, parsedMonth - 1, parsedDay)
+  if (
+    candidate.getFullYear() !== parsedYear ||
+    candidate.getMonth() !== parsedMonth - 1 ||
+    candidate.getDate() !== parsedDay
+  ) {
+    return ""
+  }
+
+  return `${year}-${month}-${day}`
+}
 
 interface AddVideoModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  locations: Array<{ id: string; name: string }>
+  locations: Array<{ id: string; name: string; roadLengthM?: number | null; laneCount?: number | null }>
   initialLocationId?: string
   onAddVideo?: (data: {
     file: File
     locationId: string
     date: string
     startTime: string
-    endTime: string
-    fastMode: boolean
+    roadLengthM?: number
+    laneCount?: number
+    countingConfig?: string
+    showLivePreview?: boolean
   }) => void | Promise<void>
 }
 
-const MAX_VISIBLE_FILE_NAME_CHARS = 48
-
-function formatDurationHours(durationSeconds: number) {
-  const precision = durationSeconds < 60 ? 5 : durationSeconds < 3600 ? 4 : 2
-  return (durationSeconds / 3600).toFixed(precision).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1")
+interface LastVideoFormValues {
+  locationId: string
+  date: string
+  startHour: string
+  startMinute: string
+  startSecond: string
+  startMeridiem: string
+  selectedCountingConfig: string
+  showLivePreview: boolean
 }
 
-function formatHumanDuration(totalSeconds: number) {
-  if (totalSeconds < 60) {
-    return `${totalSeconds} sec`
+interface LastGateLosValues {
+  [gateSuffix: string]: {
+    roadLengthM: number
+    laneCount: number
+  }
+}
+
+function parseIsoDateParts(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) {
+    return { year: "", month: "", day: "" }
   }
 
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  const parts = [
-    hours > 0 ? `${hours} hr${hours === 1 ? "" : "s"}` : null,
-    minutes > 0 ? `${minutes} min` : null,
-    seconds > 0 ? `${seconds} sec` : null,
-  ].filter(Boolean)
-
-  return parts.join(" ")
-}
-
-function formatDisplayFileName(fileName: string, maxChars = MAX_VISIBLE_FILE_NAME_CHARS) {
-  if (fileName.length <= maxChars) {
-    return fileName
+  return {
+    year: match[1],
+    month: match[2],
+    day: match[3],
   }
-
-  const extensionIndex = fileName.lastIndexOf(".")
-  const hasExtension = extensionIndex > 0 && extensionIndex < fileName.length - 1
-  const extension = hasExtension ? fileName.slice(extensionIndex) : ""
-  const baseName = hasExtension ? fileName.slice(0, extensionIndex) : fileName
-  const availableBaseChars = Math.max(8, maxChars - extension.length - 3)
-  const headChars = Math.max(4, Math.ceil(availableBaseChars * 0.6))
-  const tailChars = Math.max(3, availableBaseChars - headChars)
-
-  return `${baseName.slice(0, headChars)}...${baseName.slice(-tailChars)}${extension}`
 }
 
-function computeSchedule(startTime: string, durationHours: string) {
-  const [hoursPart, minutesPart, secondsPart = "0"] = startTime.split(":")
-  const startHours = Number(hoursPart)
-  const startMinutes = Number(minutesPart)
-  const startSeconds = Number(secondsPart)
-  const parsedDuration = Number(durationHours)
-
-  if (!startTime || !Number.isFinite(startHours) || !Number.isFinite(startMinutes) || !Number.isFinite(startSeconds) || !Number.isFinite(parsedDuration) || parsedDuration <= 0) {
+function readLastVideoFormValues(): LastVideoFormValues | null {
+  if (typeof window === "undefined") {
     return null
   }
 
-  const durationSeconds = Math.max(1, Math.round(parsedDuration * 3600))
-  const totalSeconds = startHours * 3600 + startMinutes * 60 + startSeconds + durationSeconds
-  const dayOffset = Math.floor(totalSeconds / (24 * 3600))
-  const endSeconds = ((totalSeconds % (24 * 3600)) + (24 * 3600)) % (24 * 3600)
-  const endHours = Math.floor(endSeconds / 3600)
-  const endMinuteValue = Math.floor((endSeconds % 3600) / 60)
-  const endSecondValue = endSeconds % 60
-  const includeSeconds = endSecondValue > 0 || startTime.split(":").length === 3 || durationSeconds % 60 !== 0
+  const raw = window.localStorage.getItem(LAST_VIDEO_FORM_VALUES_STORAGE_KEY)
+  if (!raw) {
+    return null
+  }
 
-  return {
-    endTime: includeSeconds
-      ? `${endHours.toString().padStart(2, "0")}:${endMinuteValue.toString().padStart(2, "0")}:${endSecondValue.toString().padStart(2, "0")}`
-      : `${endHours.toString().padStart(2, "0")}:${endMinuteValue.toString().padStart(2, "0")}`,
-    durationLabel: formatHumanDuration(durationSeconds),
-    dayOffset,
+  try {
+    const parsed = JSON.parse(raw) as Partial<LastVideoFormValues>
+    return {
+      locationId: typeof parsed.locationId === "string" ? parsed.locationId : "",
+      date: typeof parsed.date === "string" ? parsed.date : "",
+      startHour: typeof parsed.startHour === "string" ? parsed.startHour : "",
+      startMinute: typeof parsed.startMinute === "string" ? parsed.startMinute : "",
+      startSecond: typeof parsed.startSecond === "string" ? parsed.startSecond : "",
+      startMeridiem: parsed.startMeridiem === "AM" || parsed.startMeridiem === "PM" ? parsed.startMeridiem : "",
+      selectedCountingConfig: typeof parsed.selectedCountingConfig === "string" ? parsed.selectedCountingConfig : "",
+      showLivePreview: Boolean(parsed.showLivePreview),
+    }
+  } catch {
+    return null
   }
 }
 
-function readVideoDuration(file: File) {
-  return new Promise<number>((resolve, reject) => {
-    const video = document.createElement("video")
-    const objectUrl = URL.createObjectURL(file)
-    let settled = false
-    let timeoutId: number | null = null
+function writeLastVideoFormValues(values: LastVideoFormValues) {
+  if (typeof window === "undefined") {
+    return
+  }
 
-    const cleanup = () => {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId)
-      }
-      video.onloadedmetadata = null
-      video.ondurationchange = null
-      video.onseeked = null
-      video.onerror = null
-      URL.revokeObjectURL(objectUrl)
-      video.removeAttribute("src")
-      video.load()
+  window.localStorage.setItem(LAST_VIDEO_FORM_VALUES_STORAGE_KEY, JSON.stringify(values))
+}
+
+function readLastGateLosValues(): LastGateLosValues {
+  if (typeof window === "undefined") {
+    return {}
+  }
+
+  try {
+    const raw = window.localStorage.getItem(LAST_GATE_LOS_VALUES_STORAGE_KEY)
+    if (!raw) {
+      return {}
     }
 
-    const finish = (callback: () => void) => {
-      if (settled) {
-        return
-      }
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const normalized: LastGateLosValues = {}
 
-      settled = true
-      cleanup()
-      callback()
-    }
-
-    const resolveIfDurationReady = () => {
-      const duration = Number(video.duration)
-      if (Number.isFinite(duration) && duration > 0) {
-        finish(() => resolve(duration))
-        return true
+    for (const [key, value] of Object.entries(parsed)) {
+      if (!value || typeof value !== "object") {
+        continue
       }
 
-      return false
-    }
+      const record = value as { roadLengthM?: unknown; laneCount?: unknown }
+      const roadLengthM = Number(record.roadLengthM)
+      const laneCount = Number(record.laneCount)
 
-    const rejectWithReadableMessage = () => {
-      finish(() => reject(new Error("Couldn't auto-read this video's duration in the browser. You can still enter the duration manually.")))
-    }
-
-    video.preload = "metadata"
-    video.muted = true
-    video.playsInline = true
-    video.onloadedmetadata = () => {
-      if (resolveIfDurationReady()) {
-        return
-      }
-
-      try {
-        video.currentTime = Number.MAX_SAFE_INTEGER
-      } catch {
-        rejectWithReadableMessage()
+      if (Number.isFinite(roadLengthM) && roadLengthM > 0 && Number.isFinite(laneCount) && laneCount > 0) {
+        normalized[key] = {
+          roadLengthM,
+          laneCount: Math.round(laneCount),
+        }
       }
     }
-    video.ondurationchange = () => {
-      resolveIfDurationReady()
-    }
-    video.onseeked = () => {
-      if (!resolveIfDurationReady()) {
-        rejectWithReadableMessage()
-      }
-    }
-    video.onerror = () => rejectWithReadableMessage()
 
-    timeoutId = window.setTimeout(() => {
-      rejectWithReadableMessage()
-    }, 5000)
+    return normalized
+  } catch {
+    return {}
+  }
+}
 
-    video.src = objectUrl
-  })
+function writeLastGateLosValues(values: LastGateLosValues) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  window.localStorage.setItem(LAST_GATE_LOS_VALUES_STORAGE_KEY, JSON.stringify(values))
+}
+
+function resolveGateLosDefaults(location: { id: string; name: string; roadLengthM?: number | null; laneCount?: number | null } | undefined) {
+  if (!location) {
+    return { roadLengthM: "", laneCount: "" }
+  }
+
+  const gateSuffix = inferGateSuffixFromLocationId(location.id) ?? inferGateSuffixFromLocation(location.name)
+
+  if (gateSuffix && GATE_DEFAULT_LOS_VALUES[gateSuffix]) {
+    return {
+      roadLengthM: String(GATE_DEFAULT_LOS_VALUES[gateSuffix].roadLengthM),
+      laneCount: String(GATE_DEFAULT_LOS_VALUES[gateSuffix].laneCount),
+    }
+  }
+
+  return { roadLengthM: "", laneCount: "" }
+}
+
+const ACCEPTED_VIDEO_MIME_TYPES = new Set(["video/mp4", "video/x-msvideo", "video/avi", "video/msvideo"])
+
+function isAcceptedVideoFile(file: File) {
+  const normalizedName = file.name.toLowerCase()
+  if (normalizedName.endsWith(".mp4") || normalizedName.endsWith(".avi")) {
+    return true
+  }
+
+  return ACCEPTED_VIDEO_MIME_TYPES.has(file.type.toLowerCase())
 }
 
 export function AddVideoModal({ open, onOpenChange, locations, initialLocationId, onAddVideo }: AddVideoModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [locationId, setLocationId] = useState("")
   const [date, setDate] = useState("")
+  const [startYear, setStartYear] = useState("")
+  const [startMonth, setStartMonth] = useState("")
+  const [startDay, setStartDay] = useState("")
   const [startTime, setStartTime] = useState("")
-  const [durationHours, setDurationHours] = useState("1")
-  const [detectedDurationSeconds, setDetectedDurationSeconds] = useState<number | null>(null)
-  const [durationError, setDurationError] = useState<string | null>(null)
+  const [startHour, setStartHour] = useState("")
+  const [startMinute, setStartMinute] = useState("")
+  const [startSecond, setStartSecond] = useState("")
+  const [startMeridiem, setStartMeridiem] = useState("")
+  const [roadLengthM, setRoadLengthM] = useState("")
+  const [laneCount, setLaneCount] = useState("")
+  const [countingOptions, setCountingOptions] = useState<string[]>([])
+  const [selectedCountingConfig, setSelectedCountingConfig] = useState("")
+  const [countingConfigError, setCountingConfigError] = useState<string | null>(null)
+  const [isLoadingCountingOptions, setIsLoadingCountingOptions] = useState(false)
+  const [isUploadingCountingConfig, setIsUploadingCountingConfig] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [isDetectingDuration, setIsDetectingDuration] = useState(false)
-  const [fastMode, setFastMode] = useState(false)
+  const [showLivePreview, setShowLivePreview] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const countingConfigInputRef = useRef<HTMLInputElement>(null)
+
+  const refreshCountingOptions = useCallback(async () => {
+    setIsLoadingCountingOptions(true)
+    setCountingConfigError(null)
+
+    try {
+      const response = await getCountingConfigChoices()
+      const nextOptions = response.options ?? []
+      const savedSelection = typeof window !== "undefined" ? window.localStorage.getItem(LAST_COUNTING_CONFIG_STORAGE_KEY) : null
+      const fallbackSelection = response.defaultConfig && nextOptions.includes(response.defaultConfig) ? response.defaultConfig : nextOptions[0] ?? ""
+      const resolvedSelection = savedSelection && nextOptions.includes(savedSelection) ? savedSelection : fallbackSelection
+
+      setCountingOptions(nextOptions)
+      setSelectedCountingConfig((current) => {
+        if (current && nextOptions.includes(current)) {
+          return current
+        }
+        return resolvedSelection
+      })
+    } catch (error) {
+      setCountingConfigError(error instanceof Error ? error.message : "Failed to load counting configs.")
+      setCountingOptions([])
+      setSelectedCountingConfig("")
+    } finally {
+      setIsLoadingCountingOptions(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (open) {
-      setLocationId(initialLocationId ?? "")
+      const savedValues = readLastVideoFormValues()
+      const normalizedInitialLocationId = typeof initialLocationId === "string" && initialLocationId.trim().length > 0
+        ? initialLocationId
+        : undefined
+      const resolvedLocationId = normalizedInitialLocationId ?? savedValues?.locationId ?? ""
+      const resolvedDate = savedValues?.date ?? ""
+      const resolvedHour = savedValues?.startHour ?? ""
+      const resolvedMinute = savedValues?.startMinute ?? ""
+      const resolvedSecond = savedValues?.startSecond ?? ""
+      const resolvedMeridiem = savedValues?.startMeridiem ?? ""
+      const resolvedStartTime = composeTwentyFourHourTime(resolvedHour, resolvedMinute, resolvedSecond, resolvedMeridiem)
+
+      setLocationId(resolvedLocationId)
+      setDate(resolvedDate)
+      const dateParts = parseIsoDateParts(resolvedDate)
+      setStartYear(dateParts.year)
+      setStartMonth(dateParts.month)
+      setStartDay(dateParts.day)
+      setStartHour(resolvedHour)
+      setStartMinute(resolvedMinute)
+      setStartSecond(resolvedSecond)
+      setStartMeridiem(resolvedMeridiem)
+      setStartTime(resolvedStartTime)
+      const selectedLocation = locations.find((location) => location.id === resolvedLocationId)
+      const defaults = resolveGateLosDefaults(selectedLocation)
+      setRoadLengthM(defaults.roadLengthM)
+      setLaneCount(defaults.laneCount)
+      setShowLivePreview(Boolean(savedValues?.showLivePreview))
+      if (savedValues?.selectedCountingConfig) {
+        setSelectedCountingConfig(savedValues.selectedCountingConfig)
+      }
       setSubmitError(null)
+      void refreshCountingOptions()
     }
-  }, [initialLocationId, open])
+  }, [initialLocationId, locations, open, refreshCountingOptions])
+
+  const setClockPart = useCallback(
+    (next: { hour?: string; minute?: string; second?: string; meridiem?: string }) => {
+      const nextHour = next.hour ?? startHour
+      const nextMinute = next.minute ?? startMinute
+      const nextSecond = next.second ?? startSecond
+      const nextMeridiem = next.meridiem ?? startMeridiem
+      const nextTime = composeTwentyFourHourTime(nextHour, nextMinute, nextSecond, nextMeridiem)
+      setStartTime(nextTime)
+    },
+    [startHour, startMeridiem, startMinute, startSecond],
+  )
+
+  const setDatePart = useCallback(
+    (next: { year?: string; month?: string; day?: string }) => {
+      const nextYear = next.year ?? startYear
+      const nextMonth = next.month ?? startMonth
+      const nextDay = next.day ?? startDay
+      const nextDate = composeIsoDate(nextYear, nextMonth, nextDay)
+      setDate(nextDate)
+    },
+    [startDay, startMonth, startYear],
+  )
 
   useEffect(() => {
-    if (!selectedFile) {
-      setDetectedDurationSeconds(null)
-      setDurationError(null)
-      setIsDetectingDuration(false)
+    if (selectedCountingConfig && typeof window !== "undefined") {
+      window.localStorage.setItem(LAST_COUNTING_CONFIG_STORAGE_KEY, selectedCountingConfig)
+    }
+  }, [selectedCountingConfig])
+
+  useEffect(() => {
+    if (!open) {
       return
     }
 
-    let isCancelled = false
-    setIsDetectingDuration(true)
-    setDurationError(null)
+    writeLastVideoFormValues({
+      locationId,
+      date,
+      startHour,
+      startMinute,
+      startSecond,
+      startMeridiem,
+      selectedCountingConfig,
+      showLivePreview,
+    })
+  }, [date, locationId, open, selectedCountingConfig, showLivePreview, startHour, startMeridiem, startMinute, startSecond])
 
-    void readVideoDuration(selectedFile)
-      .then((durationSeconds) => {
-        if (isCancelled) return
-        const roundedSeconds = Math.max(1, Math.round(durationSeconds))
-        setDetectedDurationSeconds(roundedSeconds)
-        setDurationHours(formatDurationHours(roundedSeconds))
-      })
-      .catch((error) => {
-        if (isCancelled) return
-        setDetectedDurationSeconds(null)
-        setDurationError(error instanceof Error ? error.message : "Could not read the video duration.")
-      })
-      .finally(() => {
-        if (!isCancelled) {
-          setIsDetectingDuration(false)
-        }
-      })
-
-    return () => {
-      isCancelled = true
+  useEffect(() => {
+    if (!locationId || countingOptions.length === 0) {
+      return
     }
-  }, [selectedFile])
 
-  const computedSchedule = useMemo(() => computeSchedule(startTime, durationHours), [durationHours, startTime])
+    const locationName = locations.find((location) => location.id === locationId)?.name
+    if (!locationName) {
+      return
+    }
+
+    const matched = findGateMatchedCountingConfig(countingOptions, locationName)
+    if (matched && matched !== selectedCountingConfig) {
+      setSelectedCountingConfig(matched)
+      setCountingConfigError(null)
+    }
+  }, [countingOptions, locationId, locations, selectedCountingConfig])
+
+  useEffect(() => {
+    if (!open || !locationId) {
+      return
+    }
+
+    const selectedLocation = locations.find((location) => location.id === locationId)
+    const defaults = resolveGateLosDefaults(selectedLocation)
+    setRoadLengthM(defaults.roadLengthM)
+    setLaneCount(defaults.laneCount)
+  }, [locationId, locations, open])
 
   const submitDisabledReason = useMemo(() => {
     if (isSubmitting) {
       return "Adding video to the queue..."
-    }
-
-    if (isDetectingDuration) {
-      return "Reading the selected video before enabling upload..."
     }
 
     if (!selectedFile) {
@@ -265,12 +535,34 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
       return "Choose a start time to continue."
     }
 
-    if (!computedSchedule) {
-      return "Enter a valid start time and duration to continue."
+    if (!selectedCountingConfig) {
+      return "Choose a counting config to continue."
+    }
+
+    if ((roadLengthM.trim() && !laneCount.trim()) || (!roadLengthM.trim() && laneCount.trim())) {
+      return "Provide both road length and lane count together."
     }
 
     return null
-  }, [computedSchedule, date, isDetectingDuration, isSubmitting, locationId, selectedFile, startTime])
+  }, [date, isSubmitting, laneCount, locationId, roadLengthM, selectedCountingConfig, selectedFile, startTime])
+
+  const formattedDateLabel = useMemo(() => {
+    if (!date) {
+      return "Select month, day, and year."
+    }
+
+    const parsed = new Date(`${date}T00:00:00`)
+    if (Number.isNaN(parsed.getTime())) {
+      return "Select month, day, and year."
+    }
+
+    return parsed.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
+  }, [date])
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
@@ -290,7 +582,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
 
     if (e.dataTransfer.files?.[0]) {
       const file = e.dataTransfer.files[0]
-      if (file.type === "video/mp4" || file.type === "video/x-msvideo" || file.name.toLowerCase().endsWith(".avi")) {
+      if (isAcceptedVideoFile(file)) {
         setSelectedFile(file)
       }
     }
@@ -304,8 +596,74 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
     }
   }
 
+  const handleCountingConfigUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) {
+      return
+    }
+
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      setCountingConfigError("Counting config upload must be a .json file.")
+      return
+    }
+
+    setIsUploadingCountingConfig(true)
+    setCountingConfigError(null)
+
+    try {
+      const result = await uploadInferenceRequirement({
+        file,
+        requirementType: "counting-config",
+      })
+      await refreshCountingOptions()
+      setSelectedCountingConfig(result.filename)
+    } catch (error) {
+      setCountingConfigError(error instanceof Error ? error.message : "Failed to upload counting config.")
+    } finally {
+      setIsUploadingCountingConfig(false)
+    }
+  }
+
   const handleSubmit = async () => {
-    if (!selectedFile || !locationId || !date || !startTime || !computedSchedule || isSubmitting) return
+    if (!selectedFile || !locationId || !date || !startTime || !selectedCountingConfig || isSubmitting) return
+
+    let parsedRoadLengthM: number | undefined
+    let parsedLaneCount: number | undefined
+
+    if (roadLengthM.trim() || laneCount.trim()) {
+      if (!roadLengthM.trim() || !laneCount.trim()) {
+        setSubmitError("Provide both road length and lane count together.")
+        return
+      }
+
+      const roadLength = Number.parseFloat(roadLengthM)
+      const lanes = Number.parseInt(laneCount, 10)
+
+      if (!Number.isFinite(roadLength) || roadLength <= 0) {
+        setSubmitError("Road length must be a positive number.")
+        return
+      }
+
+      if (!Number.isFinite(lanes) || lanes <= 0) {
+        setSubmitError("Lane count must be a positive whole number.")
+        return
+      }
+
+      parsedRoadLengthM = roadLength
+      parsedLaneCount = lanes
+
+      const selectedLocation = locations.find((location) => location.id === locationId)
+      const gateSuffix = selectedLocation
+        ? (inferGateSuffixFromLocationId(selectedLocation.id) ?? inferGateSuffixFromLocation(selectedLocation.name))
+        : null
+
+      if (gateSuffix) {
+        const existingValues = readLastGateLosValues()
+        existingValues[gateSuffix] = { roadLengthM: roadLength, laneCount: lanes }
+        writeLastGateLosValues(existingValues)
+      }
+    }
 
     setSubmitError(null)
     setIsSubmitting(true)
@@ -316,8 +674,10 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
         locationId,
         date,
         startTime,
-        endTime: computedSchedule.endTime,
-        fastMode,
+        roadLengthM: parsedRoadLengthM,
+        laneCount: parsedLaneCount,
+        countingConfig: selectedCountingConfig,
+        showLivePreview,
       })
       handleClose()
     } catch (error) {
@@ -329,17 +689,16 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
 
   const handleClose = () => {
     setSelectedFile(null)
-    setLocationId("")
-    setDate("")
-    setStartTime("")
-    setDurationHours("1")
-    setDetectedDurationSeconds(null)
-    setDurationError(null)
+    setCountingConfigError(null)
     setSubmitError(null)
-    setIsDetectingDuration(false)
-    setFastMode(false)
+    setIsLoadingCountingOptions(false)
+    setIsUploadingCountingConfig(false)
+    setShowLivePreview(false)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
+    }
+    if (countingConfigInputRef.current) {
+      countingConfigInputRef.current.value = ""
     }
     onOpenChange(false)
   }
@@ -361,7 +720,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
     >
       <DialogContent
         showCloseButton={!isSubmitting}
-        className="bg-card border-border sm:max-w-md"
+        className="bg-card border-border sm:max-w-2xl"
         onEscapeKeyDown={(event) => {
           if (isSubmitting) {
             event.preventDefault()
@@ -379,16 +738,16 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
             Add New Video
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Upload a video file, choose the start time, and let the system calculate the end time from the duration.
+            Upload a video file and choose start metadata. End time is computed automatically after processing.
           </DialogDescription>
         </DialogHeader>
         
-        <div className="space-y-4 py-4">
+        <div className="space-y-2.5 py-2.5">
           {/* File Upload Area */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">Video File</label>
             <div
-              className={`relative border-2 border-dashed rounded-lg p-6 transition-colors ${
+              className={`relative rounded-lg border-2 border-dashed p-3 transition-colors ${
                 dragActive 
                   ? "border-primary bg-primary/5" 
                     : selectedFile
@@ -409,24 +768,15 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
               />
 
               {selectedFile ? (
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <FileVideo className="w-5 h-5 text-primary" />
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                    <FileVideo className="h-4 w-4 text-primary" />
                   </div>
-                  <div className="min-w-0 flex-1 overflow-hidden">
-                    <p className="overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium text-foreground" title={selectedFile.name}>
-                      {formatDisplayFileName(selectedFile.name)}
-                    </p>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{selectedFile.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                     </p>
-                    {isDetectingDuration ? (
-                      <p className="text-xs text-primary">Reading duration…</p>
-                    ) : detectedDurationSeconds !== null ? (
-                      <p className="text-xs text-primary">Detected duration: {formatHumanDuration(detectedDurationSeconds)}</p>
-                    ) : durationError ? (
-                      <p className="text-xs text-amber-400">{durationError}</p>
-                    ) : null}
                   </div>
                   <Button
                     type="button"
@@ -434,7 +784,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
                     size="icon"
                     onClick={() => setSelectedFile(null)}
                     disabled={isSubmitting}
-                    className="h-8 w-8 shrink-0"
+                    className="h-8 w-8"
                   >
                     <X className="w-4 h-4" />
                   </Button>
@@ -444,116 +794,304 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
                   className="flex flex-col items-center gap-2 cursor-pointer"
                   onClick={() => !isSubmitting && fileInputRef.current?.click()}
                 >
-                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                    <Upload className="w-6 h-6 text-muted-foreground" />
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
+                    <Upload className="h-4 w-4 text-muted-foreground" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium text-foreground">Drop video here or click to upload</p>
-                    <p className="text-xs text-muted-foreground mt-1">Supports MP4 and AVI formats</p>
+                    <p className="text-xs font-medium text-foreground">Drop video here or click to upload</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">Supports MP4 and AVI formats</p>
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Location Dropdown */}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Location</label>
+              <Select value={locationId} onValueChange={(value) => {
+                setSubmitError(null)
+                setLocationId(value)
+              }}>
+                <SelectTrigger className="bg-secondary border-border text-foreground">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id} className="text-foreground">
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Road Length (m)</label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                value={roadLengthM}
+                onChange={(event) => {
+                  setSubmitError(null)
+                  setRoadLengthM(event.target.value)
+                }}
+                placeholder="e.g., 18"
+                disabled={isSubmitting}
+                className="bg-secondary border-border text-foreground"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Lane Count</label>
+              <Input
+                type="number"
+                step="1"
+                min="1"
+                value={laneCount}
+                onChange={(event) => {
+                  setSubmitError(null)
+                  setLaneCount(event.target.value)
+                }}
+                placeholder="e.g., 2"
+                disabled={isSubmitting}
+                className="bg-secondary border-border text-foreground"
+              />
+            </div>
+          </div>
+
+
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Location</label>
-            <Select value={locationId} onValueChange={(value) => {
-              setSubmitError(null)
-              setLocationId(value)
-            }}>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-sm font-medium text-foreground">Counting Config</label>
+              <input
+                ref={countingConfigInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={(event) => {
+                  void handleCountingConfigUpload(event)
+                }}
+                className="hidden"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-border"
+                disabled={isSubmitting || isUploadingCountingConfig}
+                onClick={() => countingConfigInputRef.current?.click()}
+              >
+                {isUploadingCountingConfig ? "Uploading..." : "Upload New"}
+              </Button>
+            </div>
+            <Select
+              value={selectedCountingConfig}
+              onValueChange={(value) => {
+                setSubmitError(null)
+                setCountingConfigError(null)
+                setSelectedCountingConfig(value)
+              }}
+              disabled={isLoadingCountingOptions || isSubmitting}
+            >
               <SelectTrigger className="bg-secondary border-border text-foreground">
-                <SelectValue placeholder="Select location" />
+                <SelectValue placeholder={isLoadingCountingOptions ? "Loading counting configs..." : "Select counting config"} />
               </SelectTrigger>
               <SelectContent className="bg-card border-border">
-                {locations.map((loc) => (
-                  <SelectItem key={loc.id} value={loc.id} className="text-foreground">
-                    {loc.name}
+                {countingOptions.map((configName) => (
+                  <SelectItem key={configName} value={configName} className="text-foreground">
+                    {configName}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-[11px] text-muted-foreground">
+              Choose an existing counting-line config or upload a new .json file.
+            </p>
+            {countingConfigError ? <p className="text-xs text-destructive">{countingConfigError}</p> : null}
           </div>
 
           {/* Date */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">Start Date</label>
-            <Input 
-              type="date" 
-              value={date}
-              onChange={(e) => {
-                setSubmitError(null)
-                setDate(e.target.value)
-              }}
-              className="bg-secondary border-border text-foreground"
-            />
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <Select
+                value={startMonth}
+                onValueChange={(value) => {
+                  setSubmitError(null)
+                  setStartMonth(value)
+                  setDatePart({ month: value })
+                }}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full bg-secondary border-border text-foreground">
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72 bg-card border-border">
+                  {MONTH_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-foreground">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={startDay}
+                onValueChange={(value) => {
+                  setSubmitError(null)
+                  setStartDay(value)
+                  setDatePart({ day: value })
+                }}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full bg-secondary border-border text-foreground">
+                  <SelectValue placeholder="Day" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72 bg-card border-border">
+                  {DAY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-foreground">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={startYear}
+                onValueChange={(value) => {
+                  setSubmitError(null)
+                  setStartYear(value)
+                  setDatePart({ year: value })
+                }}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full bg-secondary border-border text-foreground">
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72 bg-card border-border">
+                  {YEAR_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-foreground">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-[11px] text-muted-foreground">{formattedDateLabel}</p>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Start Time</label>
-              <Input 
-                type="time" 
-                step="1"
-                value={startTime}
-                onChange={(e) => {
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Start Time</label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,110px)] sm:gap-3">
+              <Select
+                value={startHour}
+                onValueChange={(value) => {
                   setSubmitError(null)
-                  setStartTime(e.target.value)
+                  setStartHour(value)
+                  setClockPart({ hour: value })
                 }}
-                className="bg-secondary border-border text-foreground"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">Duration (Hours)</label>
-              <Input 
-                type="number"
-                min="0.0003"
-                step="0.0001"
-                inputMode="decimal"
-                value={durationHours}
-                onChange={(e) => {
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full bg-secondary border-border text-foreground">
+                  <SelectValue placeholder="HH" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72 bg-card border-border">
+                  {HOUR_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-foreground">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={startMinute}
+                onValueChange={(value) => {
                   setSubmitError(null)
-                  setDurationHours(e.target.value)
+                  setStartMinute(value)
+                  setClockPart({ minute: value })
                 }}
-                className="bg-secondary border-border text-foreground"
-              />
-              <p className="text-xs text-muted-foreground">
-                {isDetectingDuration
-                  ? "Reading the uploaded file to auto-fill the true duration..."
-                  : detectedDurationSeconds !== null
-                    ? `Auto-filled from video metadata: ${formatHumanDuration(detectedDurationSeconds)}.`
-                    : durationError ?? "Upload a file to auto-fill this value, then adjust it manually if needed."}
-              </p>
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full bg-secondary border-border text-foreground">
+                  <SelectValue placeholder="MM" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72 bg-card border-border">
+                  {MINUTE_SECOND_OPTIONS.map((option) => (
+                    <SelectItem key={`minute-${option.value}`} value={option.value} className="text-foreground">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={startSecond}
+                onValueChange={(value) => {
+                  setSubmitError(null)
+                  setStartSecond(value)
+                  setClockPart({ second: value })
+                }}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full bg-secondary border-border text-foreground">
+                  <SelectValue placeholder="SS" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72 bg-card border-border">
+                  {MINUTE_SECOND_OPTIONS.map((option) => (
+                    <SelectItem key={`second-${option.value}`} value={option.value} className="text-foreground">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={startMeridiem}
+                onValueChange={(value) => {
+                  setSubmitError(null)
+                  setStartMeridiem(value)
+                  setClockPart({ meridiem: value })
+                }}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full bg-secondary border-border text-foreground">
+                  <SelectValue placeholder="AM/PM" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {MERIDIEM_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option} className="text-foreground">
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            <p className="text-[11px] text-muted-foreground">Select hour, minute, and second for precise start timing.</p>
           </div>
 
-          <div className="rounded-xl border border-border bg-secondary/40 p-4">
+          <div className="rounded-xl border border-border bg-secondary/40 p-3">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-foreground">Scheduled coverage</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {computedSchedule
-                    ? `Starts at ${startTime} and ends at ${computedSchedule.endTime}${computedSchedule.dayOffset > 0 ? ` (+${computedSchedule.dayOffset} day)` : ""}. Total duration: ${computedSchedule.durationLabel}.`
-                    : "Enter a valid start time and duration to preview the coverage window."}
+                <p className="text-sm font-medium text-foreground">Coverage Window</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  The upload starts at {startTime || "the selected start time"}. End time is computed from the processed video duration.
                 </p>
               </div>
-              {computedSchedule && <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">Auto end time</span>}
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-secondary/40 p-4">
+          <div className="rounded-xl border border-border bg-secondary/40 p-3">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Zap className="h-4 w-4 text-primary" />
-                  Fast Mode
+                  <Video className="h-4 w-4 text-primary" />
+                  Live Preview Window
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Speeds up local testing by skipping some frames and using a smaller inference size.
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Show RT-DETR live frames in an OpenCV window while processing. Turn off to run fully in background.
                 </p>
               </div>
-              <Switch checked={fastMode} onCheckedChange={setFastMode} disabled={isSubmitting} className="data-[state=checked]:bg-primary" />
+              <Switch checked={showLivePreview} onCheckedChange={setShowLivePreview} disabled={isSubmitting} className="data-[state=checked]:bg-primary" />
             </div>
           </div>
         </div>
@@ -577,10 +1115,17 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
           <Button 
             type="button"
             onClick={() => void handleSubmit()}
-            disabled={!selectedFile || !locationId || !date || !startTime || !computedSchedule || isSubmitting || isDetectingDuration}
+            disabled={
+              !selectedFile ||
+              !locationId ||
+              !date ||
+              !startTime ||
+              !selectedCountingConfig ||
+              isSubmitting
+            }
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
-            {isSubmitting ? "Adding video..." : isDetectingDuration ? "Reading file..." : "Add Video"}
+            {isSubmitting ? "Adding video..." : "Add Video"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,20 +1,46 @@
 "use client"
 
-import { getMediaUrl, getVideoPlaybackPath, type LocationRecord } from "@/lib/api"
+import { getMediaUrl, getVideoPlaybackPath, type LocationRecord, type VideoCard } from "@/lib/api"
 import { VideoThumbnail } from "./video-thumbnail"
 import { Plus } from "lucide-react"
 
 interface VideoGridProps {
   locations: LocationRecord[]
-  detectionMode: boolean
   onAddVideoClick?: (locationId?: string) => void
 }
 
-export function VideoGrid({ locations, detectionMode, onAddVideoClick }: VideoGridProps) {
+function sortVideosChronologically(videos: VideoCard[]) {
+  return [...videos].sort((a, b) => {
+    const dateCompare = a.date.localeCompare(b.date)
+    if (dateCompare !== 0) return dateCompare
+    return a.startTime.localeCompare(b.startTime)
+  })
+}
+
+function formatVideoLabel(locationName: string, date: string, startTime: string) {
+  const formattedDate = date
+    ? new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : date
+  // Convert 24h startTime (HH:MM:SS) to 12h format
+  const timeParts = startTime?.split(":")
+  let timeLabel = startTime
+  if (timeParts?.length >= 2) {
+    const h = parseInt(timeParts[0], 10)
+    const m = timeParts[1]
+    const suffix = h >= 12 ? "PM" : "AM"
+    const h12 = h % 12 || 12
+    timeLabel = `${h12}:${m} ${suffix}`
+  }
+  return `${locationName} – ${formattedDate}, ${timeLabel}`
+}
+
+export function VideoGrid({ locations, onAddVideoClick }: VideoGridProps) {
   return (
     <div className="space-y-8">
       {locations.map((location) => {
-        const playableVideos = location.videos.filter((video) => Boolean(video.rawPath || video.processedPath))
+        const playableVideos = sortVideosChronologically(
+          location.videos.filter((video) => Boolean(video.rawPath || video.processedPath))
+        )
         const hiddenVideos = location.videos.length - playableVideos.length
         const placeholderCount = playableVideos.length === 0 ? 2 : 1
 
@@ -22,8 +48,8 @@ export function VideoGrid({ locations, detectionMode, onAddVideoClick }: VideoGr
           <div key={location.id}>
             <h2 className="mb-4 flex flex-wrap items-center gap-2 text-base font-semibold text-foreground">
               {location.name}
-              <span className="text-xs font-normal text-muted-foreground">({playableVideos.length} playable videos)</span>
-              {hiddenVideos > 0 && <span className="text-xs font-normal text-muted-foreground">• {hiddenVideos} hidden without media</span>}
+              <span className="text-xs font-normal text-muted-foreground">({playableVideos.length} {playableVideos.length === 1 ? "video" : "videos"})</span>
+              {hiddenVideos > 0 && <span className="text-xs font-normal text-muted-foreground">• {hiddenVideos} {hiddenVideos === 1 ? "clip" : "clips"} without media</span>}
             </h2>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -31,14 +57,15 @@ export function VideoGrid({ locations, detectionMode, onAddVideoClick }: VideoGr
                 <VideoThumbnail
                   key={video.id}
                   id={video.id}
+                  label={formatVideoLabel(location.name, video.date, video.startTime)}
                   location={location.name}
                   timestamp={video.timestamp}
                   date={video.date}
-                  detectionMode={detectionMode}
+                  startTime={video.startTime}
                   pedestrianCount={video.pedestrianCount}
                   rawPath={video.rawPath}
                   processedPath={video.processedPath}
-                  mediaUrl={getMediaUrl(getVideoPlaybackPath(video, detectionMode))}
+                  mediaUrl={getMediaUrl(getVideoPlaybackPath(video))}
                 />
               ))}
 
