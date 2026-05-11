@@ -42,6 +42,9 @@ function formatVcRatio(vc: number | null | undefined): string {
 
 function buildPopupHtml(gate: VehicleGate, los: VehicleGateLOS | undefined): string {
   const flow = gate.flowGroup === "In" ? "Entrance" : "Exit"
+  const hasData = los != null && los.vehicleCount > 0
+  const losDisplay = hasData ? (los.los ?? "—") : "—"
+  
   return `
     <div style="font-family: inherit; min-width: 180px;">
       <div style="font-weight:600; font-size:13px; margin-bottom:4px;">${escapeHtml(gate.name)}</div>
@@ -49,8 +52,8 @@ function buildPopupHtml(gate: VehicleGate, los: VehicleGateLOS | undefined): str
         ${flow} · ${escapeHtml(gate.countingConfig)}
       </div>
       <div style="display:grid; grid-template-columns: auto auto; gap:4px 12px; font-size:12px;">
-        <span style="color:#64748b">LOS</span><span><strong>${los?.los ?? "—"}</strong></span>
-        <span style="color:#64748b">V/C</span><span>${formatVcRatio(los?.vcRatio)}</span>
+        <span style="color:#64748b">LOS</span><span><strong>${losDisplay}</strong></span>
+        <span style="color:#64748b">V/C</span><span>${hasData ? formatVcRatio(los?.vcRatio) : "—"}</span>
         <span style="color:#64748b">Vehicles</span><span>${los?.vehicleCount ?? 0}</span>
       </div>
     </div>
@@ -112,7 +115,8 @@ export function VehicleGateMap({
 
     for (const gate of gates) {
       const los = losByGate[gate.id]
-      const fill = los?.los ? LOS_HEX[los.los] : LOS_UNKNOWN_HEX
+      const hasData = los != null && los.vehicleCount > 0
+      const fill = hasData && los.los ? LOS_HEX[los.los] : LOS_UNKNOWN_HEX
       const isSelected = selectedGateId === gate.id
       const radius = isSelected ? 14 : 10
       const weight = isSelected ? 3 : 2
@@ -162,8 +166,10 @@ export function VehicleGateMap({
   const losCounts = useMemo(() => {
     const counts: Partial<Record<string, number>> = {}
     for (const row of Object.values(losByGate)) {
-      const key = row.los ?? "—"
-      counts[key] = (counts[key] ?? 0) + 1
+      if (row.vehicleCount > 0) {
+        const key = row.los ?? "—"
+        counts[key] = (counts[key] ?? 0) + 1
+      }
     }
     return counts
   }, [losByGate])

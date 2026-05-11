@@ -38,13 +38,15 @@ function escapeHtml(value: string): string {
 
 function vehiclePopupHtml(gate: VehicleGate, los: VehicleGateLOS | undefined): string {
   const flow = gate.flowGroup === "In" ? "Entrance" : "Exit"
-  const vc = los?.vcRatio == null ? "—" : los.vcRatio.toFixed(2)
+  const hasData = los != null && los.vehicleCount > 0
+  const losDisplay = hasData ? (los.los ?? "—") : "—"
+  const vc = hasData && los?.vcRatio != null ? los.vcRatio.toFixed(2) : "—"
   return `
     <div style="font-family: inherit; min-width: 180px;">
       <div style="font-weight:600; font-size:13px; margin-bottom:4px;">🚗 ${escapeHtml(gate.name)}</div>
       <div style="font-size:11px; color:#64748b; margin-bottom:6px;">${flow} gate</div>
       <div style="display:grid; grid-template-columns: auto auto; gap:4px 12px; font-size:12px;">
-        <span style="color:#64748b">LOS</span><span><strong>${los?.los ?? "—"}</strong></span>
+        <span style="color:#64748b">LOS</span><span><strong>${losDisplay}</strong></span>
         <span style="color:#64748b">V/C</span><span>${vc}</span>
         <span style="color:#64748b">Vehicles</span><span>${los?.vehicleCount ?? 0}</span>
       </div>
@@ -53,15 +55,16 @@ function vehiclePopupHtml(gate: VehicleGate, los: VehicleGateLOS | undefined): s
 }
 
 function pedestrianPopupHtml(location: PTSILocation): string {
+  const hasData = location.averagePedestrians != null && location.averagePedestrians > 0
+  const losDisplay = hasData ? (location.los ?? "—") : "—"
+  const score = hasData && location.score != null ? location.score.toFixed(1) : "—"
   return `
     <div style="font-family: inherit; min-width: 180px;">
       <div style="font-weight:600; font-size:13px; margin-bottom:4px;">🚶 ${escapeHtml(location.name)}</div>
       <div style="font-size:11px; color:#64748b; margin-bottom:6px;">Pedestrian walkway</div>
       <div style="display:grid; grid-template-columns: auto auto; gap:4px 12px; font-size:12px;">
-        <span style="color:#64748b">LOS</span><span><strong>${location.los ?? "—"}</strong></span>
-        <span style="color:#64748b">Score</span><span>${
-          location.score == null ? "—" : location.score.toFixed(1)
-        }</span>
+        <span style="color:#64748b">LOS</span><span><strong>${losDisplay}</strong></span>
+        <span style="color:#64748b">Score</span><span>${score}</span>
         <span style="color:#64748b">Avg ped</span><span>${location.averagePedestrians ?? 0}</span>
       </div>
     </div>
@@ -111,7 +114,7 @@ export function UnifiedLosMap({
   // Initialize map + layer groups
   useEffect(() => {
     if (!leaflet || !containerRef.current || mapRef.current) return
-    const map = leaflet.map(containerRef.current).fitBounds(CAMPUS_BOUNDS as unknown as [number, number][])
+    const map = leaflet.map(containerRef.current, { minZoom: 14 }).fitBounds(CAMPUS_BOUNDS as unknown as [number, number][])
     leaflet
       .tileLayer(TILE_LAYER_URL, { attribution: TILE_LAYER_ATTRIBUTION, maxZoom: 19 })
       .addTo(map)
@@ -161,7 +164,8 @@ export function UnifiedLosMap({
 
     for (const gate of vehicleGates) {
       const los = vehicleLos[gate.id]
-      const fill = los?.los ? LOS_HEX[los.los] : LOS_UNKNOWN_HEX
+      const hasData = los != null && los.vehicleCount > 0
+      const fill = hasData && los.los ? LOS_HEX[los.los] : LOS_UNKNOWN_HEX
       const popup = vehiclePopupHtml(gate, los)
 
       const existing = vehicleMarkers.current.get(gate.id)
@@ -206,7 +210,8 @@ export function UnifiedLosMap({
 
     for (const location of pedestrianLocations) {
       const los = location.los as VehicleLOS | null | undefined
-      const color = los ? LOS_HEX[los] : LOS_UNKNOWN_HEX
+      const hasData = location.averagePedestrians != null && location.averagePedestrians > 0
+      const color = hasData && los ? LOS_HEX[los] : LOS_UNKNOWN_HEX
       const size = 22
       const icon = leaflet.divIcon({
         className: "unified-los-triangle",
@@ -236,10 +241,10 @@ export function UnifiedLosMap({
     const counts: Record<string, { ped: number; veh: number }> = {}
     for (const grade of LOS_GRADES) counts[grade] = { ped: 0, veh: 0 }
     for (const row of Object.values(vehicleLos)) {
-      if (row.los) counts[row.los].veh += 1
+      if (row.los && row.vehicleCount > 0) counts[row.los].veh += 1
     }
     for (const loc of pedestrianLocations) {
-      if (loc.los) counts[loc.los].ped += 1
+      if (loc.los && loc.averagePedestrians != null && loc.averagePedestrians > 0) counts[loc.los].ped += 1
     }
     return counts
   }, [vehicleLos, pedestrianLocations])

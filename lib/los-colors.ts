@@ -9,7 +9,7 @@ export const LOS_HEX: Record<VehicleLOS, string> = {
   F: "#dc2626", // red-600
 }
 
-export const LOS_UNKNOWN_HEX = "#64748b" // slate-500
+export const LOS_UNKNOWN_HEX = "#71717a" // zinc-500
 
 export const LOS_PILL_CLASS: Record<VehicleLOS, string> = {
   A: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
