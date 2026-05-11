@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useState } from "react"
 import { QueueItem } from "@/components/queue/queue-item"
-import { QueueUploadZone } from "@/components/queue/upload-zone"
 import { useUploadQueue } from "@/components/uploads/upload-queue-provider"
 import {
   AlertDialog,
@@ -16,13 +15,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, FileVideo, Trash2 } from "lucide-react"
+import { ChevronLeft, FileVideo } from "lucide-react"
 
 export default function QueuePage() {
-  const { uploads, cancelUpload, clearHistory, activeCount, queuedCount, completedCount, terminalCount, maxConcurrentUploads } = useUploadQueue()
+  const {
+    uploads,
+    cancelUpload,
+    clearHistory,
+    activeCount,
+    queuedCount,
+    completedCount,
+    terminalCount,
+    maxConcurrentUploads,
+    setMaxConcurrentUploads,
+  } = useUploadQueue()
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null)
   const [isCancelling, setIsCancelling] = useState(false)
-  const [confirmClearOpen, setConfirmClearOpen] = useState(false)
+  const [isClearDialogOpen, setIsClearDialogOpen] = useState(false)
   const pendingCancelUpload = uploads.find((upload) => upload.id === pendingCancelId) ?? null
 
   const handleConfirmCancel = async () => {
@@ -60,35 +69,47 @@ export default function QueuePage() {
             </div>
 
             <div className="hidden items-center gap-2 md:flex">
-              {terminalCount > 0 && (
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-1.5">
+                <span className="text-xs text-muted-foreground">Max concurrent videos</span>
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
-                  className="rounded-2xl border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => setConfirmClearOpen(true)}
+                  className="h-7 w-7 rounded-md p-0"
+                  disabled={maxConcurrentUploads <= 1}
+                  onClick={() => setMaxConcurrentUploads(maxConcurrentUploads - 1)}
                 >
-                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                  Clear {terminalCount} {terminalCount === 1 ? "item" : "items"}
+                  -
                 </Button>
-              )}
-              <div className="rounded-2xl border border-border bg-secondary px-4 py-2 text-right">
-                <p className="text-[11px] text-muted-foreground">Total</p>
-                <p className="text-lg font-semibold text-white">{uploads.length}</p>
+                <span className="min-w-6 text-center text-sm font-semibold text-white">{maxConcurrentUploads}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-7 rounded-md p-0"
+                  disabled={maxConcurrentUploads >= 16}
+                  onClick={() => setMaxConcurrentUploads(maxConcurrentUploads + 1)}
+                >
+                  +
+                </Button>
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                disabled={terminalCount === 0}
+                onClick={() => setIsClearDialogOpen(true)}
+              >
+                Clear Queue
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-4xl p-6">
-        <QueueUploadZone
-          activeCount={activeCount}
-          queuedCount={queuedCount}
-          completedCount={completedCount}
-          maxConcurrentUploads={maxConcurrentUploads}
-        />
-
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="rounded-2xl border border-border bg-card px-4 py-3 shadow-elevated-sm">
             <p className="text-sm text-muted-foreground">Active</p>
             <p className="mt-1 text-2xl font-semibold text-white">{activeCount}</p>
@@ -101,6 +122,10 @@ export default function QueuePage() {
             <p className="text-sm text-muted-foreground">Completed</p>
             <p className="mt-1 text-2xl font-semibold text-white">{completedCount}</p>
           </div>
+          <div className="rounded-2xl border border-border bg-card px-4 py-3 shadow-elevated-sm">
+            <p className="text-sm text-muted-foreground">Total</p>
+            <p className="mt-1 text-2xl font-semibold text-white">{uploads.length}</p>
+          </div>
         </div>
 
         <div className="mt-6 space-y-3">
@@ -108,13 +133,52 @@ export default function QueuePage() {
             <section className="rounded-2xl border border-border bg-card px-6 py-12 text-center shadow-elevated-sm">
               <FileVideo className="mx-auto mb-3 h-12 w-12 opacity-50" />
               <p className="text-muted-foreground">No videos in queue</p>
-              <p className="text-sm text-muted-foreground">Upload videos to start processing</p>
+              <p className="text-sm text-muted-foreground">Queue items will appear here while videos are being processed.</p>
             </section>
           ) : (
             uploads.map((upload) => (
               <QueueItem key={upload.id} upload={upload} onCancelRequest={setPendingCancelId} />
             ))
           )}
+        </div>
+
+        <div className="mt-4 flex md:hidden">
+          <div className="flex w-full items-center gap-2">
+            <div className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 py-1.5">
+              <span className="text-xs text-muted-foreground">Max concurrent videos</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 w-7 rounded-md p-0"
+                disabled={maxConcurrentUploads <= 1}
+                onClick={() => setMaxConcurrentUploads(maxConcurrentUploads - 1)}
+              >
+                -
+              </Button>
+              <span className="min-w-6 text-center text-sm font-semibold text-white">{maxConcurrentUploads}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 w-7 rounded-md p-0"
+                disabled={maxConcurrentUploads >= 16}
+                onClick={() => setMaxConcurrentUploads(maxConcurrentUploads + 1)}
+              >
+                +
+              </Button>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              disabled={terminalCount === 0}
+              onClick={() => setIsClearDialogOpen(true)}
+            >
+              Clear Queue
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -142,26 +206,25 @@ export default function QueuePage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={confirmClearOpen} onOpenChange={setConfirmClearOpen}>
+      <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear {terminalCount} finished {terminalCount === 1 ? "item" : "items"}?</AlertDialogTitle>
+            <AlertDialogTitle>Clear completed uploads?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes complete, errored, and cancelled uploads from the queue list.
-              Any active or queued uploads remain. The processed videos themselves are not deleted.
+              This clears finished items from the list. Videos that are still uploading or processing will stay.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep history</AlertDialogCancel>
+            <AlertDialogCancel>Keep Items</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={(event) => {
                 event.preventDefault()
                 clearHistory()
-                setConfirmClearOpen(false)
+                setIsClearDialogOpen(false)
               }}
             >
-              Clear queue
+              Clear Queue
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
