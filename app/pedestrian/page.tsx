@@ -25,7 +25,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { AlertCircle, Clock, Download, FileCode, Loader2, RefreshCw, Settings2, Upload } from "lucide-react"
+import { AlertCircle, Clock, Download, FileCode, Footprints, Loader2, RefreshCw, Settings2, Upload } from "lucide-react"
 import {
   downloadDashboardReport,
   getAISynthesis,
@@ -220,9 +220,14 @@ export default function DashboardPage() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-border bg-card/50 px-6 py-4 backdrop-blur-sm">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">System Analytics Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Real-time pedestrian tracking metrics</p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+            <Footprints className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Pedestrian Dashboard</h1>
+            <p className="text-sm text-muted-foreground">Real-time pedestrian tracking metrics</p>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
