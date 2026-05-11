@@ -24,6 +24,7 @@ import {
   type VideoDetailRecord,
   type VideoPedestrianTrackRecord,
 } from "@/lib/api"
+import { useSetVideoDomain } from "@/components/video-domain-context"
 
 // --- LOS helpers (ported from surveillance-system) ---
 type LOSLevel = "A" | "B" | "C" | "D" | "E" | "F"
@@ -370,6 +371,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   }, [searchParams])
 
   const isVehicle = videoLocation?.domain === "vehicle"
+  useSetVideoDomain(videoLocation ? (isVehicle ? "vehicle" : "pedestrian") : null)
   const flowGroup = videoLocation?.flowGroup ?? null
   const trackingType: EventRecord["type"] = isVehicle ? "vehicle-detection" : "detection"
   const trackingIdField: "trackId" | "pedestrianId" = isVehicle ? "trackId" : "pedestrianId"
@@ -730,12 +732,20 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
           <AlertCircle className="mx-auto mb-4 h-10 w-10 text-destructive" />
           <h1 className="text-xl font-semibold text-foreground">Unable to load this video</h1>
           <p className="mt-2 text-sm text-muted-foreground">{error ?? "The requested video could not be found."}</p>
-          <Link href="/" className="mt-4 inline-block">
-            <Button variant="outline" className="border-border text-foreground hover:bg-secondary">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to overview
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            className="mt-4 border-border text-foreground hover:bg-secondary"
+            onClick={() => {
+              if (typeof window !== "undefined" && window.history.length > 1) {
+                router.back()
+              } else {
+                router.push("/")
+              }
+            }}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
         </div>
       </div>
     )
@@ -748,11 +758,20 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
         {/* Header */}
         <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
           <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.history.length > 1) {
+                  router.back()
+                } else {
+                  router.push("/")
+                }
+              }}
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
             <div>
               <h1 className="text-xl font-semibold text-foreground">{video.location}</h1>
               <p className="text-sm text-muted-foreground">Video Feed #{id}</p>

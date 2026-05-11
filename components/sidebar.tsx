@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { BantaySidebarLogo } from "@/components/bantay-sidebar-logo"
+import { useVideoDomain } from "@/components/video-domain-context"
 import {
   Car,
   Cpu,
@@ -23,7 +24,10 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const videoDomain = useVideoDomain()
+  const isVideoRoute = pathname.startsWith("/video")
+  const videoRouteMatchesPedestrian = isVideoRoute && videoDomain !== "vehicle"
+  const videoRouteMatchesVehicle = isVideoRoute && videoDomain === "vehicle"
 
   return (
     <aside className="flex h-full w-24 flex-col border-r border-sidebar-border bg-sidebar relative">
@@ -43,9 +47,9 @@ export function Sidebar() {
           const isPedestrianVideo = isVideo && searchParams.get("domain") !== "vehicle"
 
           const isActive = pathname === item.href ||
-            (item.href === "/pedestrian" && (pathname.startsWith("/pedestrian") || isPedestrianVideo || pathname === "/search")) ||
+            (item.href === "/pedestrian" && (pathname.startsWith("/pedestrian") || pathname === "/search" || videoRouteMatchesPedestrian)) ||
             (item.href === "/queue" && pathname.startsWith("/queue")) ||
-            (item.href === "/vehicle" && (pathname.startsWith("/vehicle") || isVehicleVideo)) ||
+            (item.href === "/vehicle" && (pathname.startsWith("/vehicle") || videoRouteMatchesVehicle)) ||
             (item.href === "/models" && pathname.startsWith("/models"))
           return (
             <Link

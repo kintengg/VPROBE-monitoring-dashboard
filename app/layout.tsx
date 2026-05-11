@@ -5,6 +5,7 @@ import './globals.css'
 import { Sidebar } from '@/components/sidebar'
 import { LoadingProvider } from '@/components/ui/walking-loader'
 import { UploadQueueProvider } from '@/components/uploads/upload-queue-provider'
+import { VideoDomainProvider } from '@/components/video-domain-context'
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -27,12 +28,14 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased bg-[#1C1C1E] text-[#F5F5F7]`}>
         <LoadingProvider>
           <UploadQueueProvider>
-            <div className="flex h-screen overflow-hidden">
-              <Sidebar />
-              <main className="flex-1 overflow-auto">
-                {children}
-              </main>
-            </div>
+            <VideoDomainProvider>
+              <div className="flex h-screen overflow-hidden">
+                <Sidebar />
+                <main className="flex-1 overflow-auto">
+                  {children}
+                </main>
+              </div>
+            </VideoDomainProvider>
           </UploadQueueProvider>
         </LoadingProvider>
         <Analytics />
