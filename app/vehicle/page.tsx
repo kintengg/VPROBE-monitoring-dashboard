@@ -18,17 +18,14 @@ import { VehicleInOutChart } from "@/components/vehicle/vehicle-in-out-chart"
 import { VehicleClassBreakdown } from "@/components/vehicle/vehicle-class-breakdown"
 import { VehicleAnalyticsChart } from "@/components/vehicle/vehicle-analytics-chart"
 import {
-  getDashboardLOS,
-  getDashboardTraffic,
-  getDashboardTrafficByLocation,
   getLocations,
+  getVehicleAnalytics,
   getVehicleClassBreakdown,
   getVehicleGates,
+  getVehicleLOSSeries,
   getVehicleSummary,
   getVehicleTraffic,
-  type TrafficByLocationResponse,
   type TrafficPoint,
-  type TrafficResponse,
   type VehicleClassBreakdown as ClassRow,
   type VehicleGate,
   type VehicleGateLOS,
@@ -99,10 +96,9 @@ export default function VehicleDashboardPage() {
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [autoDateSet, setAutoDateSet] = useState(false)
 
-  // Analytics charts (new — from dashboard analytics endpoints)
-  const [vehicleCountTraffic, setVehicleCountTraffic] = useState<TrafficResponse | null>(null)
-  const [losTraffic, setLosTraffic] = useState<TrafficResponse | null>(null)
-  const [trafficByLocation, setTrafficByLocation] = useState<TrafficByLocationResponse | null>(null)
+  // Analytics chart data
+  const [analyticsData, setAnalyticsData] = useState<VehicleTrafficResponse | null>(null)
+  const [losData, setLosData] = useState<VehicleTrafficResponse | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -118,11 +114,11 @@ export default function VehicleDashboardPage() {
     setLoading(true)
     setError(null)
     try {
-      // Core vehicle data — errors are surfaced as a page banner.
+      // Core vehicle data
       const [summaryResponse, classResponse, trafficResponse] = await Promise.all([
         getVehicleSummary(date || undefined),
         getVehicleClassBreakdown(date || undefined),
-        getVehicleTraffic(date || undefined, "whole-day", 60),
+        getVehicleTraffic(date || undefined, range, start, 60),
       ])
       setSummary(summaryResponse)
       setClassRows(classResponse)
@@ -133,17 +129,20 @@ export default function VehicleDashboardPage() {
       setLoading(false)
     }
 
-    // Analytics endpoints are optional — a 404 or any other error is swallowed
-    // so an unimplemented/missing backend route never blocks the page or shows a banner.
-    const [countResult, losResult, byLocationResult] = await Promise.allSettled([
-      getDashboardTraffic(date || undefined, range, focus, zoom, start, gateId ?? undefined),
-      getDashboardLOS(date || undefined, range, focus, zoom, gateId ?? undefined, start),
-      getDashboardTrafficByLocation(date || undefined, range, focus, zoom, start),
+    // Analytics: vehicle count and LOS series (per-gate, time-bucketed)
+    const opts = {
+      date: date || undefined,
+      timeRange: range,
+      startTime: start,
+      gateId: gateId || undefined,
+      bucketMinutes: 60,
+    }
+    const [analyticsResult, losResult] = await Promise.allSettled([
+      getVehicleAnalytics(opts),
+      getVehicleLOSSeries(opts),
     ])
-
-    setVehicleCountTraffic(countResult.status === "fulfilled" ? countResult.value : null)
-    setLosTraffic(losResult.status === "fulfilled" ? losResult.value : null)
-    setTrafficByLocation(byLocationResult.status === "fulfilled" ? byLocationResult.value : null)
+    setAnalyticsData(analyticsResult.status === "fulfilled" ? analyticsResult.value : null)
+    setLosData(losResult.status === "fulfilled" ? losResult.value : null)
   }, [])
 
   // Gates are static — fetch once on mount
@@ -223,14 +222,8 @@ export default function VehicleDashboardPage() {
     setZoomLevel(0)
   }
 
-  const handleAnalyticsZoom = (time: string) => {
-    const canZoom =
-      Boolean(vehicleCountTraffic?.canZoomIn) ||
-      Boolean(losTraffic?.canZoomIn) ||
-      Boolean(trafficByLocation?.canZoomIn)
-    if (!canZoom) return
-    setFocusTime(time)
-    setZoomLevel((current) => current + 1)
+  const handleAnalyticsZoom = (_time: string) => {
+    // Zoom is not yet supported for vehicle analytics
   }
 
   const handleResetZoom = () => {
@@ -357,79 +350,73 @@ export default function VehicleDashboardPage() {
           </div>
         </div>
 
-        {/* ── Analytics charts (ported from surveillance-system dashboard) ── */}
+        {/* ── Analytics charts ── */}
         <div className="space-y-6">
-          {/* Row 1: per-gate vehicle count + per-gate LOS */}
+
+          {/* Row 1: Vehicle Count (per gate) + LOS (per gate) */}
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
             <VehicleAnalyticsChart
-              title={selectedGateId ? `Vehicle Count – ${selectedGateName}` : "Vehicle Count"}
+              title={selectedGateId ? `Vehicle Count – ${selectedGateName}` : "Vehicle Count per Gate"}
               description={
                 selectedGateId
-                  ? `Cumulative vehicle count for ${selectedGateName} over the selected time window.`
-                  : "Select a gate on the map to view its vehicle count trend."
+                  ? `Gate-crossing counts for ${selectedGateName} over the selected time window.`
+                  : "Gate-crossing counts per gate, bucketed over the selected time window."
               }
               timeRange={timeRange}
               selectedDate={selectedDate}
-              data={vehicleCountTraffic?.series ?? []}
+              data={(analyticsData?.series ?? []) as TrafficPoint[]}
               metricKey="cumulativeUniquePedestrians"
               metricLabel="Vehicle Count"
               seriesColor="#22C55E"
-              bucketMinutes={vehicleCountTraffic?.bucketMinutes ?? 60}
-              zoomLevel={vehicleCountTraffic?.zoomLevel ?? 0}
-              canZoomIn={vehicleCountTraffic?.canZoomIn ?? false}
-              focusTime={vehicleCountTraffic?.focusTime}
-              windowStart={vehicleCountTraffic?.windowStart}
-              windowEnd={vehicleCountTraffic?.windowEnd}
+              bucketMinutes={analyticsData?.bucketMinutes ?? 60}
+              zoomLevel={0}
+              canZoomIn={false}
               loading={loading}
               onTimeSelect={handleAnalyticsZoom}
               onResetZoom={handleResetZoom}
               chartType={vehicleChartType}
               onChartTypeChange={setVehicleChartType}
+              useLosLineColors={false}
             />
 
             <VehicleAnalyticsChart
-              title={selectedGateId ? `LOS – ${selectedGateName}` : "LOS"}
+              title={selectedGateId ? `LOS – ${selectedGateName}` : "LOS per Gate"}
               description={
                 selectedGateId
-                  ? `Level of Service trend for ${selectedGateName} across the selected time window.`
-                  : "Select a gate from the map above to view its Level of Service trend."
+                  ? `Level of Service trend for ${selectedGateName} over the selected time window.`
+                  : "Per-gate Level of Service (A–F) trend over the selected time window."
               }
               timeRange={timeRange}
               selectedDate={selectedDate}
-              data={losTraffic?.series ?? []}
+              data={(losData?.series ?? []) as TrafficPoint[]}
               metricKey="los"
               metricLabel="LOS"
               seriesColor="#06B6D4"
-              bucketMinutes={losTraffic?.bucketMinutes ?? 60}
-              zoomLevel={losTraffic?.zoomLevel ?? 0}
-              canZoomIn={losTraffic?.canZoomIn ?? false}
-              focusTime={losTraffic?.focusTime}
-              windowStart={losTraffic?.windowStart}
-              windowEnd={losTraffic?.windowEnd}
+              bucketMinutes={losData?.bucketMinutes ?? 60}
+              zoomLevel={0}
+              canZoomIn={false}
               loading={loading}
               onTimeSelect={handleAnalyticsZoom}
               onResetZoom={handleResetZoom}
               chartType={losChartType}
               onChartTypeChange={setLosChartType}
+              useLosLineColors={true}
             />
           </div>
 
-          {/* Row 2: all-gates vehicle count breakdown + all-gates LOS breakdown */}
+          {/* Row 2: Vehicle Count – All Gates (full width) */}
           <VehicleAnalyticsChart
             title="Vehicle Count (All Gates)"
             description="Gate-by-gate cumulative vehicle count for the selected date and time window."
             timeRange={timeRange}
             selectedDate={selectedDate}
-            data={trafficByLocation?.series ?? []}
+            data={(analyticsData?.series ?? []) as TrafficPoint[]}
             metricKey="cumulativeUniquePedestrians"
             metricLabel="Vehicle Count"
             seriesColor="#22C55E"
-            bucketMinutes={trafficByLocation?.bucketMinutes ?? 60}
-            zoomLevel={trafficByLocation?.zoomLevel ?? 0}
-            canZoomIn={trafficByLocation?.canZoomIn ?? false}
-            focusTime={trafficByLocation?.focusTime}
-            windowStart={trafficByLocation?.windowStart}
-            windowEnd={trafficByLocation?.windowEnd}
+            bucketMinutes={analyticsData?.bucketMinutes ?? 60}
+            zoomLevel={0}
+            canZoomIn={false}
             loading={loading}
             onTimeSelect={handleAnalyticsZoom}
             onResetZoom={handleResetZoom}
@@ -439,41 +426,41 @@ export default function VehicleDashboardPage() {
             useLosLineColors={false}
           />
 
+          {/* Row 3: LOS – All Gates (full width) */}
           <VehicleAnalyticsChart
             title="LOS (All Gates)"
             description="Gate-by-gate Level of Service trend for the selected date and time window."
             timeRange={timeRange}
             selectedDate={selectedDate}
-            data={trafficByLocation?.series ?? []}
+            data={(losData?.series ?? []) as TrafficPoint[]}
             metricKey="los"
             metricLabel="LOS"
             seriesColor="#06B6D4"
-            bucketMinutes={trafficByLocation?.bucketMinutes ?? 60}
-            zoomLevel={trafficByLocation?.zoomLevel ?? 0}
-            canZoomIn={trafficByLocation?.canZoomIn ?? false}
-            focusTime={trafficByLocation?.focusTime}
-            windowStart={trafficByLocation?.windowStart}
-            windowEnd={trafficByLocation?.windowEnd}
+            bucketMinutes={losData?.bucketMinutes ?? 60}
+            zoomLevel={0}
+            canZoomIn={false}
             loading={loading}
             onTimeSelect={handleAnalyticsZoom}
             onResetZoom={handleResetZoom}
             chartType="bar"
             legendPosition="top"
+            useLosLineColors={true}
+          />
+
+          {/* Row 4: In/Out chart – at the end */}
+          <VehicleInOutChart
+            timeRange={timeRange}
+            selectedDate={selectedDate}
+            data={(traffic?.series ?? []) as TrafficPoint[]}
+            bucketMinutes={traffic?.bucketMinutes ?? 60}
+            zoomLevel={0}
+            canZoomIn={false}
+            loading={loading}
+            chartType={inOutChartType}
+            onChartTypeChange={setInOutChartType}
           />
         </div>
 
-        {/* In/Out traffic chart — full width */}
-        <VehicleInOutChart
-          timeRange={timeRange}
-          selectedDate={selectedDate}
-          data={(traffic?.series ?? []) as TrafficPoint[]}
-          bucketMinutes={traffic?.bucketMinutes ?? 60}
-          zoomLevel={0}
-          canZoomIn={false}
-          loading={loading}
-          chartType={inOutChartType}
-          onChartTypeChange={setInOutChartType}
-        />
       </div>
     </div>
   )

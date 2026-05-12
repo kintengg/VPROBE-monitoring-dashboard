@@ -1,7 +1,6 @@
 "use client"
 
 import { Car } from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import type { VehicleClassBreakdown as ClassRow } from "@/lib/api"
 
 interface VehicleClassBreakdownProps {
@@ -19,58 +18,86 @@ const CLASS_COLORS: Record<string, string> = {
   bicycle: "bg-teal-500",
 }
 
+const CLASS_HEX: Record<string, string> = {
+  car: "#0EA5E9",
+  motorcycle: "#D946EF",
+  truck: "#F97316",
+  bus: "#10B981",
+  van: "#F59E0B",
+  tricycle: "#F43F5E",
+  jeepney: "#A855F7",
+  bicycle: "#14B8A6",
+}
+
 export function VehicleClassBreakdown({ rows }: VehicleClassBreakdownProps) {
   const total = rows.reduce((acc, r) => acc + r.count, 0)
 
   return (
-    <Card className="h-full flex flex-col rounded-3xl border border-border bg-card shadow-elevated">
-      <CardHeader>
-        <CardTitle className="text-base">Class breakdown</CardTitle>
-        <CardDescription>Detected vehicle classes (PCE-weighted)</CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 overflow-auto">
-        {rows.length === 0 || total === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-            <Car className="mb-2 h-6 w-6" />
-            <p className="text-xs">No class data yet.</p>
+    <div className="h-full rounded-3xl border border-border bg-card p-6 shadow-elevated flex flex-col">
+      <div className="mb-5">
+        <h3 className="text-base font-semibold text-foreground">Class Breakdown</h3>
+        <p className="text-sm text-muted-foreground">Detected vehicle classes for this date</p>
+      </div>
+
+      {rows.length === 0 || total === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
+          <Car className="h-8 w-8 opacity-40" />
+          <p className="text-sm">No class data yet.</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {/* Stacked bar */}
+          <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-secondary/50">
+            {rows.map((row) => (
+              <div
+                key={row.className}
+                className={CLASS_COLORS[row.className] ?? "bg-slate-500"}
+                style={{ width: `${row.share * 100}%` }}
+                title={`${row.label ?? row.className}: ${row.count} (${(row.share * 100).toFixed(0)}%)`}
+              />
+            ))}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {/* Stacked horizontal bar */}
-            <div className="flex h-3 w-full overflow-hidden rounded-full bg-secondary/50">
-              {rows.map((row) => {
-                const color = CLASS_COLORS[row.className] ?? "bg-slate-500"
-                return (
+
+          {/* Class rows */}
+          <ul className="space-y-3">
+            {rows.map((row) => {
+              const hex = CLASS_HEX[row.className] ?? "#71717A"
+              const pct = (row.share * 100).toFixed(0)
+              return (
+                <li key={row.className} className="flex items-center gap-3">
+                  {/* Color dot */}
                   <div
-                    key={row.className}
-                    className={color}
-                    style={{ width: `${row.share * 100}%` }}
-                    title={`${row.label ?? row.className}: ${row.count}`}
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: hex }}
                   />
-                )
-              })}
-            </div>
-            {/* Rows */}
-            <ul className="space-y-2 text-sm">
-              {rows.map((row) => {
-                const color = CLASS_COLORS[row.className] ?? "bg-slate-500"
-                return (
-                  <li key={row.className} className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 text-foreground">
-                      <span className={`inline-block h-2.5 w-2.5 rounded-full ${color}`} />
-                      <span>{row.label ?? row.className}</span>
-                      <span className="text-[10px] text-muted-foreground">×{row.pceMultiplier} PCE</span>
-                    </span>
-                    <span className="tabular-nums text-muted-foreground">
-                      {row.count} <span className="text-[10px]">({(row.share * 100).toFixed(0)}%)</span>
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
+                  {/* Label */}
+                  <span className="flex-1 text-sm text-foreground">
+                    {row.label ?? row.className}
+                  </span>
+                  {/* Progress bar */}
+                  <div className="h-1.5 w-24 overflow-hidden rounded-full bg-secondary/60">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${row.share * 100}%`, backgroundColor: hex }}
+                    />
+                  </div>
+                  {/* Count + % */}
+                  <span className="w-20 text-right text-sm tabular-nums text-muted-foreground">
+                    {row.count.toLocaleString()}{" "}
+                    <span className="text-xs opacity-70">({pct}%)</span>
+                  </span>
+                </li>
+              )
+            })}
+          </ul>
+
+          {/* Total */}
+          <div className="mt-2 flex items-center justify-between border-t border-border pt-3 text-sm">
+            <span className="text-muted-foreground">Total vehicles</span>
+            <span className="font-semibold tabular-nums text-foreground">{total.toLocaleString()}</span>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
   )
 }

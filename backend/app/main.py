@@ -752,9 +752,48 @@ def get_vehicle_class_breakdown(date: Optional[str] = None) -> list[dict[str, An
 def get_vehicle_traffic(
     date: Optional[str] = None,
     timeRange: str = "whole-day",
+    startTime: Optional[str] = None,
     bucketMinutes: int = 60,
 ) -> dict[str, Any]:
-    series = vehicle_store.vehicle_traffic_series(date, bucketMinutes)
+    series = vehicle_store.vehicle_traffic_series(date, timeRange, startTime, bucketMinutes)
+    return {"timeRange": timeRange, "bucketMinutes": bucketMinutes, "series": series}
+
+
+@app.get("/api/vehicle/dashboard/analytics")
+def get_vehicle_analytics(
+    date: Optional[str] = None,
+    timeRange: str = "whole-day",
+    startTime: Optional[str] = None,
+    gateId: Optional[str] = None,
+    bucketMinutes: int = 60,
+) -> dict[str, Any]:
+    """Per-gate time-bucketed vehicle count series for the analytics charts."""
+    series = vehicle_store.vehicle_analytics_series(
+        date=date,
+        time_range=timeRange,
+        start_time=startTime,
+        gate_id=gateId,
+        bucket_minutes=bucketMinutes,
+    )
+    return {"timeRange": timeRange, "bucketMinutes": bucketMinutes, "series": series}
+
+
+@app.get("/api/vehicle/dashboard/los")
+def get_vehicle_los_series(
+    date: Optional[str] = None,
+    timeRange: str = "whole-day",
+    startTime: Optional[str] = None,
+    gateId: Optional[str] = None,
+    bucketMinutes: int = 60,
+) -> dict[str, Any]:
+    """Per-gate time-bucketed LOS series for the LOS chart."""
+    series = vehicle_store.vehicle_los_series(
+        date=date,
+        time_range=timeRange,
+        start_time=startTime,
+        gate_id=gateId,
+        bucket_minutes=bucketMinutes,
+    )
     return {"timeRange": timeRange, "bucketMinutes": bucketMinutes, "series": series}
 
 

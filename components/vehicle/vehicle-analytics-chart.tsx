@@ -199,7 +199,7 @@ export function VehicleAnalyticsChart({
     new Set([
       ...locationTotals.map((item) => item.location),
       ...data.flatMap((point) =>
-        Object.keys(point).filter((key) => !RESERVED_SERIES_KEYS.has(key) && !key.endsWith("__los")),
+        Object.keys(point).filter((key) => !RESERVED_SERIES_KEYS.has(key) && !key.endsWith("__los") && !key.endsWith("__losRank")),
       ),
     ]),
   ).map((location, index) => ({

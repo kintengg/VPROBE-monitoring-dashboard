@@ -974,12 +974,49 @@ export function getVehicleClassBreakdown(date?: string) {
   )
 }
 
-export function getVehicleTraffic(date?: string, timeRange = "whole-day", bucketMinutes = 60) {
+export function getVehicleTraffic(date?: string, timeRange = "whole-day", startTime?: string, bucketMinutes = 60) {
   return request<VehicleTrafficResponse>(
     withQuery("/api/vehicle/dashboard/traffic", {
       date,
       timeRange,
+      startTime,
       bucketMinutes: String(bucketMinutes),
+    }),
+  )
+}
+
+export function getVehicleAnalytics(options: {
+  date?: string
+  timeRange?: string
+  startTime?: string
+  gateId?: string
+  bucketMinutes?: number
+}) {
+  return request<VehicleTrafficResponse>(
+    withQuery("/api/vehicle/dashboard/analytics", {
+      date: options.date,
+      timeRange: options.timeRange,
+      startTime: options.startTime,
+      gateId: options.gateId,
+      bucketMinutes: options.bucketMinutes !== undefined ? String(options.bucketMinutes) : undefined,
+    }),
+  )
+}
+
+export function getVehicleLOSSeries(options: {
+  date?: string
+  timeRange?: string
+  startTime?: string
+  gateId?: string
+  bucketMinutes?: number
+}) {
+  return request<VehicleTrafficResponse>(
+    withQuery("/api/vehicle/dashboard/los", {
+      date: options.date,
+      timeRange: options.timeRange,
+      startTime: options.startTime,
+      gateId: options.gateId,
+      bucketMinutes: options.bucketMinutes !== undefined ? String(options.bucketMinutes) : undefined,
     }),
   )
 }

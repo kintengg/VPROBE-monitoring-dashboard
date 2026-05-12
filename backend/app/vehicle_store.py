@@ -222,8 +222,13 @@ def ensure_gate_locations_seeded() -> int:
     return changed
 
 
-def vehicle_traffic_series(date: Optional[str] = None, bucket_minutes: int = 60) -> list[dict[str, Any]]:
-    """Per-bucket In/Out counts. Empty list when no vehicle events exist yet."""
+def vehicle_traffic_series(
+    date: Optional[str] = None,
+    time_range: str = "whole-day",
+    start_time: Optional[str] = None,
+    bucket_minutes: int = 60,
+) -> list[dict[str, Any]]:
+    """Per-bucket In/Out counts filtered by date and time window."""
     events = list_vehicle_events(date)
     if not events:
         return []
@@ -233,9 +238,10 @@ def vehicle_traffic_series(date: Optional[str] = None, bucket_minutes: int = 60)
         for video in state.get("videos", [])
     }
     bucket_minutes = max(1, int(bucket_minutes))
+    window_start_min, window_end_min = _time_range_bounds(time_range, start_time)
     buckets: dict[str, dict[str, Any]] = {}
     for event in events:
-        offset_seconds = event.get("offsetSeconds") or 0
+        offset_seconds = float(event.get("offsetSeconds") or 0)
         clock = (
             event.get("clockTime")
             or event.get("startTime")
@@ -245,9 +251,13 @@ def vehicle_traffic_series(date: Optional[str] = None, bucket_minutes: int = 60)
         )
         try:
             hours, minutes = str(clock).split(":")[:2]
-            total_minutes = int(hours) * 60 + int(minutes) + (int(offset_seconds) // 60)
+            total_minutes = int(hours) * 60 + int(minutes) + int(offset_seconds) // 60
         except (TypeError, ValueError):
             continue
+        # Apply time-window filter
+        if window_start_min is not None and window_end_min is not None:
+            if total_minutes < window_start_min or total_minutes >= window_end_min:
+                continue
         bucket_index = (total_minutes // bucket_minutes) * bucket_minutes
         bucket_key = f"{bucket_index // 60:02d}:{bucket_index % 60:02d}"
         bucket = buckets.setdefault(bucket_key, {"id": bucket_key, "time": bucket_key, "In": 0, "Out": 0})
@@ -256,3 +266,217 @@ def vehicle_traffic_series(date: Optional[str] = None, bucket_minutes: int = 60)
         if flow_group:
             bucket[flow_group] = int(bucket.get(flow_group, 0)) + 1
     return [buckets[k] for k in sorted(buckets.keys())]
+
+
+def _parse_time_to_minutes(value: str) -> "Optional[int]":
+    """Parse 'HH:MM' or 'H:MM AM/PM' to total minutes since midnight."""
+    try:
+        cleaned = str(value).strip()
+        parts = cleaned.split()
+        time_part = parts[0]
+        ampm = parts[1].upper() if len(parts) > 1 else None
+        h, m = time_part.split(":")[:2]
+        hours = int(h)
+        minutes = int(m)
+        if ampm == "PM" and hours != 12:
+            hours += 12
+        elif ampm == "AM" and hours == 12:
+            hours = 0
+        return hours * 60 + minutes
+    except (IndexError, ValueError, TypeError):
+        return None
+
+
+def _time_range_bounds(time_range: str, start_time: "Optional[str]") -> "tuple[Optional[int], Optional[int]]":
+    """Return (start_minutes, end_minutes) window, or (None, None) for whole-day."""
+    if time_range == "whole-day":
+        return None, None
+    hours_map = {"12h": 12 * 60, "6h": 6 * 60, "4h": 4 * 60, "3h": 3 * 60, "2h": 2 * 60, "1h": 60, "30m": 30}
+    window_minutes = hours_map.get(time_range)
+    if window_minutes is None:
+        return None, None
+    start_minutes = _parse_time_to_minutes(start_time or "06:00") or (6 * 60)
+    return start_minutes, start_minutes + window_minutes
+
+
+def vehicle_analytics_series(
+    date: "Optional[str]" = None,
+    time_range: str = "whole-day",
+    start_time: "Optional[str]" = None,
+    gate_id: "Optional[str]" = None,
+    bucket_minutes: int = 60,
+) -> "list[dict[str, Any]]":
+    """Per-bucket vehicle count series broken down by gate name.
+
+    Each bucket point has gate names as keys so the frontend can render
+    one series per gate. Supports date, time-range, start-time, and
+    optional single-gate filtering.
+    """
+    events = list_vehicle_events(date, gate_id)
+    if not events:
+        return []
+
+    state = store.load_state()
+    video_start_by_id = {
+        str(video.get("id")): str(video.get("startTime") or video.get("timestamp") or "")
+        for video in state.get("videos", [])
+    }
+
+    bucket_minutes = max(1, int(bucket_minutes))
+    window_start_min, window_end_min = _time_range_bounds(time_range, start_time)
+
+    # Only count gate-crossing events (vehicle-detection with a gate name)
+    gate_events = [
+        e for e in events
+        if str(e.get("type") or "") == "vehicle-detection" and (e.get("gateName") or "").strip()
+    ]
+
+    buckets: "dict[str, dict[str, Any]]" = {}
+    all_gates: "set[str]" = set()
+
+    for event in gate_events:
+        offset_seconds = float(event.get("offsetSeconds") or 0)
+        video_clock = video_start_by_id.get(str(event.get("videoId"))) or event.get("timestamp") or "00:00"
+        start_min = _parse_time_to_minutes(str(video_clock))
+        if start_min is None:
+            continue
+        total_minutes = start_min + int(offset_seconds) // 60
+
+        # Apply time-range window filter
+        if window_start_min is not None and window_end_min is not None:
+            if total_minutes < window_start_min or total_minutes >= window_end_min:
+                continue
+
+        bucket_index = (total_minutes // bucket_minutes) * bucket_minutes
+        bucket_key = f"{bucket_index // 60:02d}:{bucket_index % 60:02d}"
+        gate_name = (event.get("gateName") or "").strip()
+        all_gates.add(gate_name)
+
+        if bucket_key not in buckets:
+            buckets[bucket_key] = {"id": bucket_key, "time": bucket_key}
+        buckets[bucket_key][gate_name] = int(buckets[bucket_key].get(gate_name, 0)) + 1
+
+    if not buckets:
+        return []
+
+    # Fill missing gate keys with 0 so chart lines connect cleanly
+    sorted_keys = sorted(buckets.keys())
+    result = []
+    for key in sorted_keys:
+        point = dict(buckets[key])
+        for gate in all_gates:
+            point.setdefault(gate, 0)
+        result.append(point)
+    return result
+
+
+def vehicle_los_series(
+    date: "Optional[str]" = None,
+    time_range: str = "whole-day",
+    start_time: "Optional[str]" = None,
+    gate_id: "Optional[str]" = None,
+    bucket_minutes: int = 60,
+) -> "list[dict[str, Any]]":
+    """Per-bucket LOS series broken down by gate name.
+
+    Each bucket point has keys `gateName__los` (letter grade) and
+    `gateName__losRank` (1-6 int) so the VehicleAnalyticsChart can render
+    per-gate LOS lines using the same logic as the pedestrian chart.
+    """
+    events = list_vehicle_events(date, gate_id)
+    if not events:
+        return []
+
+    state = store.load_state()
+    video_start_by_id = {
+        str(video.get("id")): str(video.get("startTime") or video.get("timestamp") or "")
+        for video in state.get("videos", [])
+    }
+
+    gates = gate_registry.list_gates()
+    gate_name_by_normalized: dict[str, str] = {g["normalizedName"]: g["name"] for g in gates}
+
+    # Build location overrides for road_length / lane_count
+    locations = state.get("locations", [])
+    location_by_gate_id: dict[str, dict[str, Any]] = {}
+    for loc in locations:
+        for gate in gates:
+            if loc.get("id") == gate["id"] or gate_registry.normalize_gate_name(
+                loc.get("name") or ""
+            ) == gate["normalizedName"]:
+                location_by_gate_id[gate["id"]] = loc
+
+    gate_meta: dict[str, dict[str, Any]] = {}
+    for gate in gates:
+        loc_override = location_by_gate_id.get(gate["id"])
+        road_length_km = gate.get("defaultRoadLengthKm", 0.0)
+        lane_count = gate.get("defaultLaneCount") or 0
+        if loc_override:
+            rlm = loc_override.get("roadLengthM")
+            if isinstance(rlm, (int, float)) and rlm > 0:
+                road_length_km = float(rlm) / 1000.0
+            lc = loc_override.get("laneCount")
+            if isinstance(lc, (int, float)) and lc > 0:
+                lane_count = int(round(lc))
+        gate_meta[gate["name"]] = {
+            "road_length_km": road_length_km,
+            "lane_count": lane_count,
+        }
+
+    bucket_minutes = max(1, int(bucket_minutes))
+    window_start_min, window_end_min = _time_range_bounds(time_range, start_time)
+
+    # Only gate-crossing events
+    gate_events = [
+        e for e in events
+        if str(e.get("type") or "") == "vehicle-detection" and (e.get("gateName") or "").strip()
+    ]
+
+    # Bucket events per gate name
+    # Structure: { bucket_key: { gate_name: { class_name: count } } }
+    buckets: dict[str, dict[str, dict[str, int]]] = {}
+    all_gate_names: set[str] = set()
+
+    for event in gate_events:
+        offset_seconds = float(event.get("offsetSeconds") or 0)
+        video_clock = video_start_by_id.get(str(event.get("videoId"))) or event.get("timestamp") or "00:00"
+        start_min = _parse_time_to_minutes(str(video_clock))
+        if start_min is None:
+            continue
+        total_minutes = start_min + int(offset_seconds) // 60
+
+        if window_start_min is not None and window_end_min is not None:
+            if total_minutes < window_start_min or total_minutes >= window_end_min:
+                continue
+
+        bucket_index = (total_minutes // bucket_minutes) * bucket_minutes
+        bucket_key = f"{bucket_index // 60:02d}:{bucket_index % 60:02d}"
+        gate_name = (event.get("gateName") or "").strip()
+        vehicle_class = normalize_vehicle_class_name(event.get("vehicleClass")) or "car"
+        all_gate_names.add(gate_name)
+
+        bucket = buckets.setdefault(bucket_key, {})
+        gate_bucket = bucket.setdefault(gate_name, {})
+        gate_bucket[vehicle_class] = gate_bucket.get(vehicle_class, 0) + 1
+
+    if not buckets:
+        return []
+
+    sorted_keys = sorted(buckets.keys())
+    result = []
+    for key in sorted_keys:
+        point: dict[str, Any] = {"id": key, "time": key}
+        gate_data = buckets[key]
+        for gate_name in all_gate_names:
+            counts = gate_data.get(gate_name, {})
+            meta = gate_meta.get(gate_name, {"road_length_km": 0.0, "lane_count": 0})
+            capacity = los_module.compute_capacity(
+                meta["road_length_km"], meta["lane_count"]
+            )
+            vc_ratio = los_module.compute_vc_ratio(counts, capacity) if capacity > 0 else None
+            grade = los_module.get_los(vc_ratio)
+            rank = los_module.los_rank(grade)
+            point[f"{gate_name}__los"] = grade
+            point[f"{gate_name}__losRank"] = rank if rank is not None else 0
+        result.append(point)
+    return result
