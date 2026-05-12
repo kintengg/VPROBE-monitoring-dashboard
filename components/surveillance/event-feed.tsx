@@ -24,7 +24,8 @@ export function EventFeed({ filteredVideoId, events = [], loading = false, selec
   const vehicleTypeOptions = useMemo(() => {
     const types = new Set<string>()
     for (const event of events) {
-      if (event.type !== "detection") {
+      // Include all vehicle-related event types in the filter dropdown
+      if (!isVehicleEvent(event)) {
         continue
       }
       types.add(resolveVehicleType(event))
@@ -34,9 +35,25 @@ export function EventFeed({ filteredVideoId, events = [], loading = false, selec
   }, [events])
 
   const displayEvents = useMemo(() => {
+    // For the event feed, we only want to show vehicles that went OUT (gate crossings
+    // with direction "out"), plus any non-vehicle events (alerts, motion, etc.).
+    // We explicitly exclude "vehicle-track" events which represent "first seen" detections.
+    const visibleEvents = events.filter((event) => {
+      if (event.type === "vehicle-track") {
+        // First-seen track events are excluded from the feed
+        return false
+      }
+      if (event.type === "vehicle-detection") {
+        // Only show gate-crossing events where direction is "out"
+        return event.direction === "out"
+      }
+      // Keep all other event types (detection, alert, motion)
+      return true
+    })
+
     const filteredEvents = selectedVehicleType === "all"
-      ? events
-      : events.filter((event) => event.type === "detection" && resolveVehicleType(event) === selectedVehicleType)
+      ? visibleEvents
+      : visibleEvents.filter((event) => isVehicleEvent(event) && resolveVehicleType(event) === selectedVehicleType)
 
     const sorted = filteredVideoId
       ? [...filteredEvents].sort((left, right) => {
@@ -180,6 +197,27 @@ function formatEventDescription(description: string, vehicleType: string) {
     .replace(/Vehicle ID\s*#?\d+/gi, vehicleType)
 }
 
+function formatGateName(raw: string): string {
+  // Normalise separators: "gate2", "gate_2", "gate-2", "gate 2" → tokens
+  const tokens = raw
+    .trim()
+    .replace(/([a-zA-Z])([0-9])/g, "$1 $2")  // "gate2" → "gate 2"
+    .replace(/([0-9])([a-zA-Z])/g, "$1 $2")  // "2gate" → "2 gate"
+    .split(/[\s_\-]+/)                         // split on whitespace, underscore, hyphen
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+
+  return tokens.join(" ")
+}
+
+function isVehicleEvent(event: EventRecord): boolean {
+  return (
+    event.type === "detection" ||
+    event.type === "vehicle-detection" ||
+    event.type === "vehicle-track"
+  )
+}
+
 function EventCard({
   event,
   active,
@@ -191,7 +229,7 @@ function EventCard({
   interactive: boolean
   onSelect: () => void
 }) {
-  const isDetection = event.type === "detection"
+  const isVehicle = isVehicleEvent(event)
   const vehicleType = resolveVehicleType(event)
   const VehicleIcon = resolveVehicleIcon(vehicleType)
 
@@ -208,20 +246,31 @@ function EventCard({
     >
       <div className="flex items-start gap-3">
         <div className="w-14 h-10 rounded-xl bg-[#1C1C1E] flex items-center justify-center shrink-0">
-          {isDetection ? <VehicleIcon className="w-4 h-4 text-accent" /> : <AlertCircle className="w-4 h-4 text-chart-4" />}
+          {isVehicle ? <VehicleIcon className="w-4 h-4 text-accent" /> : <AlertCircle className="w-4 h-4 text-chart-4" />}
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium text-foreground truncate">{event.location}</p>
+            <p className="text-sm font-medium text-foreground truncate">
+              {event.type === "vehicle-detection" && event.gateName
+                ? formatGateName(event.gateName)
+                : event.location}
+            </p>
             {interactive && <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">{formatEventDescription(event.description, vehicleType)}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {event.type === "vehicle-detection"
+              ? `${vehicleType} exited through ${event.gateName ? formatGateName(event.gateName) : "gate"}`
+              : formatEventDescription(event.description, vehicleType)}
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
             <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{event.timestamp}</span>
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">{vehicleType}</span>
-            {typeof event.pedestrianId === "number" && (
-              <span className="rounded-full bg-accent/10 px-2 py-0.5 font-medium text-accent">Vehicle ID #{event.pedestrianId}</span>
+            {typeof event.trackId === "number" && (
+              <span className="rounded-full bg-accent/10 px-2 py-0.5 font-medium text-accent">ID #{event.trackId}</span>
+            )}
+            {typeof event.pedestrianId === "number" && !event.trackId && (
+              <span className="rounded-full bg-accent/10 px-2 py-0.5 font-medium text-accent">ID #{event.pedestrianId}</span>
             )}
           </div>
         </div>
