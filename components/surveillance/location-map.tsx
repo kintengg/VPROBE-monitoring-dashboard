@@ -15,9 +15,10 @@ interface Location {
 interface LocationMapProps {
   locations: Location[]
   selectedDate?: string
+  markerStyle?: "circle" | "triangle"
 }
 
-export function LocationMap({ locations, selectedDate }: LocationMapProps) {
+export function LocationMap({ locations, selectedDate, markerStyle }: LocationMapProps) {
   return (
     <div className="rounded-2xl border border-border bg-secondary/50 p-3 shadow-elevated-sm">
       <div className="mb-3 flex items-center justify-between">
@@ -27,7 +28,7 @@ export function LocationMap({ locations, selectedDate }: LocationMapProps) {
         </span>
       </div>
 
-      <CampusOsmMap selectedDate={selectedDate} showLosDetails={false} className="h-[clamp(14rem,36vh,24rem)] w-full rounded-xl border border-border" />
+      <CampusOsmMap selectedDate={selectedDate} showLosDetails={false} markerStyle={markerStyle} locations={locations} className="h-[clamp(14rem,36vh,24rem)] w-full rounded-xl border border-border" />
 
       {locations.length > 0 && (
         <div className="mt-2.5 border-t border-border/60 pt-2.5">

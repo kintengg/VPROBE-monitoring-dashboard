@@ -414,7 +414,7 @@ function SurveillancePageContent() {
         <AISearchBar />
         {/* Location Map - Below Search Bar */}
         <div className="px-4 pb-4">
-          <LocationMap locations={filteredLocations} />
+          <LocationMap locations={filteredLocations} markerStyle="triangle" />
         </div>
         <EventFeed events={events} loading={eventsLoading} />
       </aside>

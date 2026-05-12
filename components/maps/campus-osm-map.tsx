@@ -36,15 +36,24 @@ function formatDateLabel(dateKey: string | null | undefined) {
   })
 }
 
+interface LocationPin {
+  id: string
+  name: string
+  latitude: number
+  longitude: number
+}
+
 interface CampusOsmMapProps {
   selectedDate?: string | null
   occlusionData?: PTSIMapResponse | null
+  locations?: LocationPin[]
   focusTime?: string
   timeRange?: string
   startTime?: string
   zoomLevel?: number
   selectedLocationId?: string
   showLosDetails?: boolean
+  markerStyle?: "circle" | "triangle"
   className?: string
 }
 
@@ -570,15 +579,26 @@ function resolveSelectedLandmarkId(
   return nearestLandmark?.id ?? null
 }
 
+function createTrianglePinHtml(fillColor: string): string {
+  const sizePx = 26
+  return `<div style="width:${sizePx}px; height:${sizePx}px; filter:drop-shadow(0 1px 2px rgba(0,0,0,0.45));">
+    <svg viewBox="0 0 24 24" width="${sizePx}" height="${sizePx}" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="12,2 22,21 2,21" fill="${fillColor}" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round" />
+    </svg>
+  </div>`
+}
+
 export function CampusOsmMap({
   selectedDate,
   occlusionData,
+  locations,
   focusTime,
   timeRange,
   startTime,
   zoomLevel,
   selectedLocationId,
   showLosDetails = true,
+  markerStyle = "circle",
   className,
 }: CampusOsmMapProps) {
   const mapHostRef = useRef<HTMLDivElement | null>(null)
@@ -598,10 +618,26 @@ export function CampusOsmMap({
   }, [focusTime, startTime, timeRange, zoomLevel])
 
   const markers = useMemo(() => {
-    const locationCandidates = occlusionData?.locations ?? []
-    const locationById = new Map(locationCandidates.map((location) => [location.id, location]))
-    const locationByName = new Map(locationCandidates.map((location) => [normalizeLocationName(location.name), location]))
-    const locationsWithValidCoords = locationCandidates.filter(
+    const occlusionLocations = occlusionData?.locations ?? []
+    const directLocations = locations ?? []
+
+    // When direct locations are provided (sidebar maps), place pins at their actual coordinates
+    if (directLocations.length > 0 && occlusionLocations.length === 0) {
+      return directLocations.map((loc) => ({
+        id: loc.id,
+        name: loc.name,
+        lat: loc.latitude,
+        lng: loc.longitude,
+        los: loc.name,
+        markerColor: "#0EA5E9",
+        isSelected: loc.id === (selectedLocationId ?? ""),
+        sourceLabel: `Location: ${loc.name}`,
+      }))
+    }
+
+    const locationById = new Map(occlusionLocations.map((location) => [location.id, location]))
+    const locationByName = new Map(occlusionLocations.map((location) => [normalizeLocationName(location.name), location]))
+    const locationsWithValidCoords = occlusionLocations.filter(
       (location) => Number.isFinite(location.latitude) && Number.isFinite(location.longitude),
     )
     const selectedLocationRecord = selectedLocationId ? locationById.get(selectedLocationId) ?? null : null
@@ -662,7 +698,7 @@ export function CampusOsmMap({
         sourceLabel,
       }
     })
-  }, [focusTime, occlusionData, selectedLocationId, showLosDetails, startTime, timeRange])
+  }, [focusTime, occlusionData, selectedLocationId, showLosDetails, startTime, timeRange, locations])
 
   useEffect(() => {
     if (!mapHostRef.current) {
@@ -748,13 +784,25 @@ export function CampusOsmMap({
           interactive: false,
         }).addTo(activeMap)
 
-        const marker = L.circleMarker([markerData.lat, markerData.lng], {
-          radius: markerData.isSelected ? 11 : 8,
-          color: markerData.isSelected ? "#0F172A" : "#E2E8F0",
-          weight: markerData.isSelected ? 3 : 1.5,
-          fillColor: markerData.markerColor,
-          fillOpacity: markerData.isSelected ? 1 : 0.95,
-        }).addTo(activeMap)
+        const marker = (() => {
+          if (markerStyle === "triangle") {
+            const icon = L.divIcon({
+              className: "",
+              iconSize: [26, 28],
+              iconAnchor: [13, 26],
+              popupAnchor: [0, -27],
+              html: createTrianglePinHtml(markerData.markerColor),
+            })
+            return L.marker([markerData.lat, markerData.lng], { icon }).addTo(activeMap)
+          }
+          return L.circleMarker([markerData.lat, markerData.lng], {
+            radius: markerData.isSelected ? 11 : 8,
+            color: markerData.isSelected ? "#0F172A" : "#E2E8F0",
+            weight: markerData.isSelected ? 3 : 1.5,
+            fillColor: markerData.markerColor,
+            fillOpacity: markerData.isSelected ? 1 : 0.95,
+          }).addTo(activeMap)
+        })()
 
         const tooltipContent = `<strong>${showLosDetails ? markerData.los : markerData.name}</strong>`
         marker.bindTooltip(tooltipContent, {
@@ -794,7 +842,7 @@ export function CampusOsmMap({
       resizeObserver?.disconnect()
       map?.remove()
     }
-  }, [dateLabel, mapContextLabel, markers, showLosDetails])
+  }, [dateLabel, mapContextLabel, markers, showLosDetails, markerStyle])
 
   return (
     <div className={`${className ?? "h-72 w-full rounded-xl"} relative overflow-hidden`}>
