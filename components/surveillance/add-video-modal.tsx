@@ -198,6 +198,7 @@ interface AddVideoModalProps {
   onOpenChange: (open: boolean) => void
   locations: Array<{ id: string; name: string; roadLengthM?: number | null; laneCount?: number | null }>
   initialLocationId?: string
+  domain?: "pedestrian" | "vehicle"
   onAddVideo?: (data: {
     file: File
     locationId: string
@@ -349,7 +350,8 @@ function isAcceptedVideoFile(file: File) {
   return ACCEPTED_VIDEO_MIME_TYPES.has(file.type.toLowerCase())
 }
 
-export function AddVideoModal({ open, onOpenChange, locations, initialLocationId, onAddVideo }: AddVideoModalProps) {
+export function AddVideoModal({ open, onOpenChange, locations, initialLocationId, domain, onAddVideo }: AddVideoModalProps) {
+  const isPedestrian = domain === "pedestrian"
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [locationId, setLocationId] = useState("")
   const [date, setDate] = useState("")
@@ -535,7 +537,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
       return "Choose a start time to continue."
     }
 
-    if (!selectedCountingConfig) {
+    if (!isPedestrian && !selectedCountingConfig) {
       return "Choose a counting config to continue."
     }
 
@@ -626,7 +628,8 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
   }
 
   const handleSubmit = async () => {
-    if (!selectedFile || !locationId || !date || !startTime || !selectedCountingConfig || isSubmitting) return
+    if (!selectedFile || !locationId || !date || !startTime || isSubmitting) return
+    if (!isPedestrian && !selectedCountingConfig) return
 
     let parsedRoadLengthM: number | undefined
     let parsedLaneCount: number | undefined
@@ -676,7 +679,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
         startTime,
         roadLengthM: parsedRoadLengthM,
         laneCount: parsedLaneCount,
-        countingConfig: selectedCountingConfig,
+        countingConfig: isPedestrian ? undefined : selectedCountingConfig,
         showLivePreview,
       })
       handleClose()
@@ -806,7 +809,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className={`grid gap-3 ${isPedestrian ? "sm:grid-cols-1" : "sm:grid-cols-3"}`}>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-foreground">Location</label>
               <Select value={locationId} onValueChange={(value) => {
@@ -825,89 +828,95 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Road Length (m)</label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={roadLengthM}
-                onChange={(event) => {
-                  setSubmitError(null)
-                  setRoadLengthM(event.target.value)
-                }}
-                placeholder="e.g., 18"
-                disabled={isSubmitting}
-                className="bg-secondary border-border text-foreground"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Lane Count</label>
-              <Input
-                type="number"
-                step="1"
-                min="1"
-                value={laneCount}
-                onChange={(event) => {
-                  setSubmitError(null)
-                  setLaneCount(event.target.value)
-                }}
-                placeholder="e.g., 2"
-                disabled={isSubmitting}
-                className="bg-secondary border-border text-foreground"
-              />
-            </div>
+            {!isPedestrian && (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Road Length (m)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={roadLengthM}
+                    onChange={(event) => {
+                      setSubmitError(null)
+                      setRoadLengthM(event.target.value)
+                    }}
+                    placeholder="e.g., 18"
+                    disabled={isSubmitting}
+                    className="bg-secondary border-border text-foreground"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-foreground">Lane Count</label>
+                  <Input
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={laneCount}
+                    onChange={(event) => {
+                      setSubmitError(null)
+                      setLaneCount(event.target.value)
+                    }}
+                    placeholder="e.g., 2"
+                    disabled={isSubmitting}
+                    className="bg-secondary border-border text-foreground"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-sm font-medium text-foreground">Counting Config</label>
-              <input
-                ref={countingConfigInputRef}
-                type="file"
-                accept=".json,application/json"
-                onChange={(event) => {
-                  void handleCountingConfigUpload(event)
+          {!isPedestrian && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-medium text-foreground">Counting Config</label>
+                <input
+                  ref={countingConfigInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={(event) => {
+                    void handleCountingConfigUpload(event)
+                  }}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-border"
+                  disabled={isSubmitting || isUploadingCountingConfig}
+                  onClick={() => countingConfigInputRef.current?.click()}
+                >
+                  {isUploadingCountingConfig ? "Uploading..." : "Upload New"}
+                </Button>
+              </div>
+              <Select
+                value={selectedCountingConfig}
+                onValueChange={(value) => {
+                  setSubmitError(null)
+                  setCountingConfigError(null)
+                  setSelectedCountingConfig(value)
                 }}
-                className="hidden"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="border-border"
-                disabled={isSubmitting || isUploadingCountingConfig}
-                onClick={() => countingConfigInputRef.current?.click()}
+                disabled={isLoadingCountingOptions || isSubmitting}
               >
-                {isUploadingCountingConfig ? "Uploading..." : "Upload New"}
-              </Button>
+                <SelectTrigger className="bg-secondary border-border text-foreground">
+                  <SelectValue placeholder={isLoadingCountingOptions ? "Loading counting configs..." : "Select counting config"} />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {countingOptions.map((configName) => (
+                    <SelectItem key={configName} value={configName} className="text-foreground">
+                      {configName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">
+                Choose an existing counting-line config or upload a new .json file.
+              </p>
+              {countingConfigError ? <p className="text-xs text-destructive">{countingConfigError}</p> : null}
             </div>
-            <Select
-              value={selectedCountingConfig}
-              onValueChange={(value) => {
-                setSubmitError(null)
-                setCountingConfigError(null)
-                setSelectedCountingConfig(value)
-              }}
-              disabled={isLoadingCountingOptions || isSubmitting}
-            >
-              <SelectTrigger className="bg-secondary border-border text-foreground">
-                <SelectValue placeholder={isLoadingCountingOptions ? "Loading counting configs..." : "Select counting config"} />
-              </SelectTrigger>
-              <SelectContent className="bg-card border-border">
-                {countingOptions.map((configName) => (
-                  <SelectItem key={configName} value={configName} className="text-foreground">
-                    {configName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground">
-              Choose an existing counting-line config or upload a new .json file.
-            </p>
-            {countingConfigError ? <p className="text-xs text-destructive">{countingConfigError}</p> : null}
-          </div>
+          )}
 
           {/* Date */}
           <div className="space-y-2">
@@ -1120,7 +1129,7 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
               !locationId ||
               !date ||
               !startTime ||
-              !selectedCountingConfig ||
+              (!isPedestrian && !selectedCountingConfig) ||
               isSubmitting
             }
             className="bg-primary text-primary-foreground hover:bg-primary/90"

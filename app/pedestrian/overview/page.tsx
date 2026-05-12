@@ -431,6 +431,7 @@ function SurveillancePageContent() {
         onOpenChange={handleVideoModalChange}
         locations={locations.map((location) => ({ id: location.id, name: location.name }))}
         initialLocationId={selectedUploadLocationId}
+        domain="pedestrian"
         onAddVideo={handleAddVideo}
       />
       <AlertDialog open={Boolean(pendingDeleteLocation)} onOpenChange={(open) => !open && setPendingDeleteLocation(null)}>
