@@ -264,7 +264,7 @@ function EventCard({
               : formatEventDescription(event.description, vehicleType)}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
-            <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{event.timestamp}</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">{formatOffset(event)}</span>
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">{vehicleType}</span>
             {typeof event.trackId === "number" && (
               <span className="rounded-full bg-accent/10 px-2 py-0.5 font-medium text-accent">ID #{event.trackId}</span>

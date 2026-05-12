@@ -99,6 +99,8 @@ export default function VehicleDashboardPage() {
   // Analytics chart data
   const [analyticsData, setAnalyticsData] = useState<VehicleTrafficResponse | null>(null)
   const [losData, setLosData] = useState<VehicleTrafficResponse | null>(null)
+  const [allGatesAnalyticsData, setAllGatesAnalyticsData] = useState<VehicleTrafficResponse | null>(null)
+  const [allGatesLosData, setAllGatesLosData] = useState<VehicleTrafficResponse | null>(null)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -137,12 +139,16 @@ export default function VehicleDashboardPage() {
       gateId: gateId || undefined,
       bucketMinutes: 60,
     }
-    const [analyticsResult, losResult] = await Promise.allSettled([
+    const [analyticsResult, losResult, allAnalyticsResult, allLosResult] = await Promise.allSettled([
       getVehicleAnalytics(opts),
       getVehicleLOSSeries(opts),
+      getVehicleAnalytics({ ...opts, gateId: undefined }),
+      getVehicleLOSSeries({ ...opts, gateId: undefined }),
     ])
     setAnalyticsData(analyticsResult.status === "fulfilled" ? analyticsResult.value : null)
     setLosData(losResult.status === "fulfilled" ? losResult.value : null)
+    setAllGatesAnalyticsData(allAnalyticsResult.status === "fulfilled" ? allAnalyticsResult.value : null)
+    setAllGatesLosData(allLosResult.status === "fulfilled" ? allLosResult.value : null)
   }, [])
 
   // Gates are static — fetch once on mount
@@ -410,7 +416,7 @@ export default function VehicleDashboardPage() {
             description="Gate-by-gate cumulative vehicle count for the selected date and time window."
             timeRange={timeRange}
             selectedDate={selectedDate}
-            data={(analyticsData?.series ?? []) as TrafficPoint[]}
+            data={(allGatesAnalyticsData?.series ?? []) as TrafficPoint[]}
             metricKey="cumulativeUniquePedestrians"
             metricLabel="Vehicle Count"
             seriesColor="#22C55E"
@@ -432,7 +438,7 @@ export default function VehicleDashboardPage() {
             description="Gate-by-gate Level of Service trend for the selected date and time window."
             timeRange={timeRange}
             selectedDate={selectedDate}
-            data={(losData?.series ?? []) as TrafficPoint[]}
+            data={(allGatesLosData?.series ?? []) as TrafficPoint[]}
             metricKey="los"
             metricLabel="LOS"
             seriesColor="#06B6D4"

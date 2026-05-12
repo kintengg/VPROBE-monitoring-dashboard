@@ -778,7 +778,7 @@ def get_vehicle_analytics(
     return {"timeRange": timeRange, "bucketMinutes": bucketMinutes, "series": series}
 
 
-@app.get("/api/vehicle/dashboard/los")
+@app.get("/api/vehicle/dashboard/los-series")
 def get_vehicle_los_series(
     date: Optional[str] = None,
     timeRange: str = "whole-day",

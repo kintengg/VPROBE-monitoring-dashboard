@@ -1011,7 +1011,7 @@ export function getVehicleLOSSeries(options: {
   bucketMinutes?: number
 }) {
   return request<VehicleTrafficResponse>(
-    withQuery("/api/vehicle/dashboard/los", {
+    withQuery("/api/vehicle/dashboard/los-series", {
       date: options.date,
       timeRange: options.timeRange,
       startTime: options.startTime,

@@ -44,7 +44,9 @@ import {
   updateLocation,
 } from "@/lib/api"
 
-export default function SurveillancePage() {
+import { Suspense } from "react"
+
+function SurveillancePageContent() {
   const { enqueueUploads, settledUploadsVersion } = useUploadQueue()
   const router = useRouter()
   const pathname = usePathname()
@@ -456,5 +458,13 @@ export default function SurveillancePage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+export default function SurveillancePage() {
+  return (
+    <Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}>
+      <SurveillancePageContent />
+    </Suspense>
   )
 }
