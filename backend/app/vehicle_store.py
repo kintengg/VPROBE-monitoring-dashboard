@@ -77,6 +77,20 @@ def list_vehicle_events(date: Optional[str] = None, gate_id: Optional[str] = Non
     return events
 
 
+def list_gate_crossing_events(date: Optional[str] = None, gate_id: Optional[str] = None) -> list[dict[str, Any]]:
+    """Return only gate-crossing events (vehicle-detection type with a gate name).
+
+    Used for class breakdown and LOS calculations so that tracking-only
+    'first seen' events (vehicle-track) are not double-counted.
+    """
+    events = list_vehicle_events(date, gate_id)
+    return [
+        e for e in events
+        if str(e.get("type") or "").strip().lower() == "vehicle-detection"
+        and (e.get("gateName") or "").strip()
+    ]
+
+
 def class_breakdown(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     raw_counts: dict[str, int] = {}
     for event in events:
@@ -156,8 +170,10 @@ def per_gate_los(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def vehicle_summary(date: Optional[str] = None) -> dict[str, Any]:
-    events = list_vehicle_events(date)
-    rows = per_gate_los(events)
+    # Use gate-crossing events only so vehicle-track 'first seen' events
+    # don't inflate the count.
+    crossing_events = list_gate_crossing_events(date)
+    rows = per_gate_los(crossing_events)
     total_vehicles = sum(int(row.get("vehicleCount") or 0) for row in rows)
     avg_vc = None
     valid_vc = [row["vcRatio"] for row in rows if isinstance(row["vcRatio"], (int, float))]
@@ -229,7 +245,7 @@ def vehicle_traffic_series(
     bucket_minutes: int = 60,
 ) -> list[dict[str, Any]]:
     """Per-bucket In/Out counts filtered by date and time window."""
-    events = list_vehicle_events(date)
+    events = list_gate_crossing_events(date)
     if not events:
         return []
     state = store.load_state()
@@ -312,7 +328,7 @@ def vehicle_analytics_series(
     one series per gate. Supports date, time-range, start-time, and
     optional single-gate filtering.
     """
-    events = list_vehicle_events(date, gate_id)
+    events = list_gate_crossing_events(date, gate_id)
     if not events:
         return []
 
@@ -324,12 +340,6 @@ def vehicle_analytics_series(
 
     bucket_minutes = max(1, int(bucket_minutes))
     window_start_min, window_end_min = _time_range_bounds(time_range, start_time)
-
-    # Only count gate-crossing events (vehicle-detection with a gate name)
-    gate_events = [
-        e for e in events
-        if str(e.get("type") or "") == "vehicle-detection" and (e.get("gateName") or "").strip()
-    ]
 
     buckets: "dict[str, dict[str, Any]]" = {}
     all_gates: "set[str]" = set()
@@ -383,7 +393,7 @@ def vehicle_los_series(
     `gateName__losRank` (1-6 int) so the VehicleAnalyticsChart can render
     per-gate LOS lines using the same logic as the pedestrian chart.
     """
-    events = list_vehicle_events(date, gate_id)
+    events = list_gate_crossing_events(date, gate_id)
     if not events:
         return []
 
@@ -426,18 +436,12 @@ def vehicle_los_series(
     bucket_minutes = max(1, int(bucket_minutes))
     window_start_min, window_end_min = _time_range_bounds(time_range, start_time)
 
-    # Only gate-crossing events
-    gate_events = [
-        e for e in events
-        if str(e.get("type") or "") == "vehicle-detection" and (e.get("gateName") or "").strip()
-    ]
-
     # Bucket events per gate name
     # Structure: { bucket_key: { gate_name: { class_name: count } } }
     buckets: dict[str, dict[str, dict[str, int]]] = {}
     all_gate_names: set[str] = set()
 
-    for event in gate_events:
+    for event in events:
         offset_seconds = float(event.get("offsetSeconds") or 0)
         video_clock = video_start_by_id.get(str(event.get("videoId"))) or event.get("timestamp") or "00:00"
         start_min = _parse_time_to_minutes(str(video_clock))

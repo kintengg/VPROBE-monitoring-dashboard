@@ -738,13 +738,13 @@ def get_vehicle_summary(date: Optional[str] = None) -> dict[str, Any]:
 
 @app.get("/api/vehicle/dashboard/los", response_model=list[schemas.VehicleGateLOS])
 def get_vehicle_los(date: Optional[str] = None) -> list[dict[str, Any]]:
-    events = vehicle_store.list_vehicle_events(date)
+    events = vehicle_store.list_gate_crossing_events(date)
     return vehicle_store.per_gate_los(events)
 
 
 @app.get("/api/vehicle/dashboard/class-breakdown", response_model=list[schemas.VehicleClassBreakdown])
 def get_vehicle_class_breakdown(date: Optional[str] = None) -> list[dict[str, Any]]:
-    events = vehicle_store.list_vehicle_events(date)
+    events = vehicle_store.list_gate_crossing_events(date)
     return vehicle_store.class_breakdown(events)
 
 

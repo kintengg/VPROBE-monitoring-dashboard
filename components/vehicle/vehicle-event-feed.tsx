@@ -50,7 +50,7 @@ export function VehicleEventFeed({
                 className="cursor-pointer px-4 py-3 transition-colors hover:bg-secondary/40"
                 onClick={() => {
                   if (event.videoId) {
-                    router.push(`/video/${event.videoId}`)
+                    router.push(`/video/${event.videoId}?domain=vehicle`)
                   }
                 }}
               >

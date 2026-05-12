@@ -26,7 +26,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const videoDomain = useVideoDomain()
   const isVideoRoute = pathname.startsWith("/video")
-  const videoRouteMatchesPedestrian = isVideoRoute && videoDomain !== "vehicle"
+  const videoRouteMatchesPedestrian = isVideoRoute && videoDomain === "pedestrian"
   const videoRouteMatchesVehicle = isVideoRoute && videoDomain === "vehicle"
 
   return (

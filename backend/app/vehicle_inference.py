@@ -431,7 +431,10 @@ def run_vehicle_inference(
     crossing_events = _events_from_csv(csv_rows, video_id, video_record)
     track_events = _track_events_from_detections(detection_rows, video_id, video_record)
     events = track_events + crossing_events
-    vehicle_count = len(track_events) if track_events else _vehicle_count_from_summary(summary_txt, csv_rows)
+    if counting_config_name:
+        vehicle_count = len(crossing_events)
+    else:
+        vehicle_count = len(track_events) if track_events else _vehicle_count_from_summary(summary_txt, csv_rows)
 
     # Re-encode to H.264 so the browser's <video> element can play it.
     # OpenCV's mp4v codec is not natively supported by most browsers.

@@ -321,10 +321,14 @@ export function PlaybackTimeline({
       if (ticks.length >= 8) break
     }
 
-    if (ticks.length === 0 || ticks[0] !== zoomWindowStart) {
+    // Guard: only prepend start / append end when they aren't already
+    // represented by a regular tick within half a step's distance.
+    const minSpacing = step * 0.5
+    if (ticks.length === 0 || ticks[0] - zoomWindowStart > minSpacing) {
       ticks.unshift(zoomWindowStart)
     }
-    if (ticks[ticks.length - 1] !== zoomWindowEnd) {
+    const lastTick = ticks[ticks.length - 1]
+    if (zoomWindowEnd - lastTick > minSpacing) {
       ticks.push(zoomWindowEnd)
     }
 

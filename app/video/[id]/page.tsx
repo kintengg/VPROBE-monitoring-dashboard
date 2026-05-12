@@ -443,7 +443,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
         .join(" ")
 
     const detectionEvents = orderedEvents.filter(
-      (event) => event.type === "detection" || event.type === "vehicle-detection" || event.type === "vehicle-track",
+      (event) => event.type === "vehicle-detection",
     )
     const counts = new Map<string, number>()
 
@@ -607,7 +607,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     [currentTimeSeconds, timelineRowsBySecond],
   )
 
-  const isVehicleVideo = videoLocation?.domain === "vehicle"
+  const isVehicleVideo = videoLocation?.domain === "vehicle" || queryDomain === "vehicle"
 
   const trackedVehiclesSoFar = useMemo(() => {
     if (isVehicleVideo) {
