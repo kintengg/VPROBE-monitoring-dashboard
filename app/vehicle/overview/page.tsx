@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   AlertCircle,
@@ -40,7 +40,6 @@ import {
 import { useUploadQueue } from "@/components/uploads/upload-queue-provider"
 import { VideoGrid } from "@/components/surveillance/video-grid"
 import { EventFeed } from "@/components/surveillance/event-feed"
-import { AISearchBar } from "@/components/surveillance/ai-search-bar"
 import { AddLocationModal } from "@/components/surveillance/add-location-modal"
 import { AddVideoModal } from "@/components/surveillance/add-video-modal"
 import { LocationMap } from "@/components/surveillance/location-map"
@@ -57,7 +56,7 @@ import {
   type VehicleSummary,
 } from "@/lib/api"
 
-export default function VehicleSurveillancePage() {
+function VehicleSurveillancePageContent() {
   const { enqueueUploads, settledUploadsVersion } = useUploadQueue()
   const router = useRouter()
   const pathname = usePathname()
@@ -426,11 +425,10 @@ export default function VehicleSurveillancePage() {
 
       {/* Right Sidebar */}
       <aside className="w-80 border-l border-border bg-card/30 flex flex-col h-full">
-        <AISearchBar />
-        <div className="px-4 pt-4 pb-4">
-          <LocationMap locations={filteredLocations} />
+        <div className="p-4">
+          <LocationMap locations={filteredLocations} markerShape="circle" />
         </div>
-        <EventFeed events={events} loading={eventsLoading} />
+        <EventFeed events={events} loading={eventsLoading} domain="vehicle" />
       </aside>
 
       {/* Modals */}
@@ -472,5 +470,13 @@ export default function VehicleSurveillancePage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+export default function VehicleSurveillancePage() {
+  return (
+    <Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>}>
+      <VehicleSurveillancePageContent />
+    </Suspense>
   )
 }

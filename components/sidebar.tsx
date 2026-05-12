@@ -8,7 +8,6 @@ import { useVideoDomain } from "@/components/video-domain-context"
 import {
   Car,
   Cpu,
-  Footprints,
   LayoutDashboard,
   ListOrdered,
   User,
@@ -16,7 +15,7 @@ import {
 
 const navItems = [
   { icon: LayoutDashboard, label: "Unified", href: "/" },
-  { icon: Footprints, label: "Pedestrian", href: "/pedestrian" },
+  { icon: User, label: "Pedestrian", href: "/pedestrian" },
   { icon: Car, label: "Vehicle", href: "/vehicle" },
   { icon: ListOrdered, label: "Queue", href: "/queue" },
   { icon: Cpu, label: "Models", href: "/models" },

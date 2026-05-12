@@ -83,6 +83,7 @@ export default function VehicleDashboardPage() {
   const [vehicleChartType, setVehicleChartType] = useState<"line" | "bar">("line")
   const [losChartType, setLosChartType] = useState<"line" | "bar">("bar")
   const [allGatesVehicleChartType, setAllGatesVehicleChartType] = useState<"line" | "bar">("line")
+  const [allGatesLosChartType, setAllGatesLosChartType] = useState<"line" | "bar">("bar")
   const [inOutChartType, setInOutChartType] = useState<"line" | "bar">("line")
 
   // Gate data (static)
@@ -448,7 +449,8 @@ export default function VehicleDashboardPage() {
             loading={loading}
             onTimeSelect={handleAnalyticsZoom}
             onResetZoom={handleResetZoom}
-            chartType="bar"
+            chartType={allGatesLosChartType}
+            onChartTypeChange={setAllGatesLosChartType}
             legendPosition="top"
             useLosLineColors={true}
           />

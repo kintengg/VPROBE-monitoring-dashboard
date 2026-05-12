@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-10T06:09:45Z",
+  "generatedAt": "2026-05-12T06:19:39Z",
   "portableRoot": "storage/portable",
   "videos": [
     {
@@ -111,33 +111,6 @@
       }
     },
     {
-      "videoId": "73c1ecaf",
-      "locationId": "edsa-sec-walk",
-      "locationName": "EDSA Sec Walk",
-      "date": "2026-05-10",
-      "startTime": "10:00:00",
-      "endTime": "10:00:59",
-      "directory": "storage/portable/videos/73c1ecaf",
-      "generatedAt": "2026-05-10T06:09:45Z",
-      "pedestrianCount": 59,
-      "artifacts": {
-        "metadataJson": "storage/portable/videos/73c1ecaf/metadata.json",
-        "manifestJson": "storage/portable/videos/73c1ecaf/manifest.json",
-        "eventsCsv": "storage/portable/videos/73c1ecaf/events.csv",
-        "eventsJson": "storage/portable/videos/73c1ecaf/events.json",
-        "tracksCsv": "storage/portable/videos/73c1ecaf/tracks.csv",
-        "tracksJson": "storage/portable/videos/73c1ecaf/tracks.json",
-        "trajectorySamplesCsv": "storage/portable/videos/73c1ecaf/trajectory_samples.csv",
-        "trajectorySamplesJson": "storage/portable/videos/73c1ecaf/trajectory_samples.json",
-        "timelineCsv": "storage/portable/videos/73c1ecaf/timeline.csv",
-        "timelineJson": "storage/portable/videos/73c1ecaf/timeline.json",
-        "wholeFootageLogCsv": "storage/portable/videos/73c1ecaf/whole_footage_log.csv",
-        "wholeFootageLogJson": "storage/portable/videos/73c1ecaf/whole_footage_log.json",
-        "severityBucketsCsv": "storage/portable/videos/73c1ecaf/severity_buckets.csv",
-        "severityBucketsJson": "storage/portable/videos/73c1ecaf/severity_buckets.json"
-      }
-    },
-    {
       "videoId": "73f4aeb2",
       "locationId": "gate-2-9",
       "locationName": "Gate 2.9",
@@ -162,6 +135,60 @@
         "wholeFootageLogJson": "storage/portable/videos/73f4aeb2/whole_footage_log.json",
         "severityBucketsCsv": "storage/portable/videos/73f4aeb2/severity_buckets.csv",
         "severityBucketsJson": "storage/portable/videos/73f4aeb2/severity_buckets.json"
+      }
+    },
+    {
+      "videoId": "ffccbf1e",
+      "locationId": "edsa-sec-walk",
+      "locationName": "EDSA Sec Walk",
+      "date": "2026-05-12",
+      "startTime": "11:05:51",
+      "endTime": "11:05:51",
+      "directory": "storage/portable/videos/ffccbf1e",
+      "generatedAt": "2026-05-12T06:07:55Z",
+      "pedestrianCount": 59,
+      "artifacts": {
+        "metadataJson": "storage/portable/videos/ffccbf1e/metadata.json",
+        "manifestJson": "storage/portable/videos/ffccbf1e/manifest.json",
+        "eventsCsv": "storage/portable/videos/ffccbf1e/events.csv",
+        "eventsJson": "storage/portable/videos/ffccbf1e/events.json",
+        "tracksCsv": "storage/portable/videos/ffccbf1e/tracks.csv",
+        "tracksJson": "storage/portable/videos/ffccbf1e/tracks.json",
+        "trajectorySamplesCsv": "storage/portable/videos/ffccbf1e/trajectory_samples.csv",
+        "trajectorySamplesJson": "storage/portable/videos/ffccbf1e/trajectory_samples.json",
+        "timelineCsv": "storage/portable/videos/ffccbf1e/timeline.csv",
+        "timelineJson": "storage/portable/videos/ffccbf1e/timeline.json",
+        "wholeFootageLogCsv": "storage/portable/videos/ffccbf1e/whole_footage_log.csv",
+        "wholeFootageLogJson": "storage/portable/videos/ffccbf1e/whole_footage_log.json",
+        "severityBucketsCsv": "storage/portable/videos/ffccbf1e/severity_buckets.csv",
+        "severityBucketsJson": "storage/portable/videos/ffccbf1e/severity_buckets.json"
+      }
+    },
+    {
+      "videoId": "17a4e44f",
+      "locationId": "gate-3",
+      "locationName": "Gate 3",
+      "date": "2026-05-12",
+      "startTime": "14:18:51",
+      "endTime": "14:18:51",
+      "directory": "storage/portable/videos/17a4e44f",
+      "generatedAt": "2026-05-12T06:19:39Z",
+      "pedestrianCount": 33,
+      "artifacts": {
+        "metadataJson": "storage/portable/videos/17a4e44f/metadata.json",
+        "manifestJson": "storage/portable/videos/17a4e44f/manifest.json",
+        "eventsCsv": "storage/portable/videos/17a4e44f/events.csv",
+        "eventsJson": "storage/portable/videos/17a4e44f/events.json",
+        "tracksCsv": "storage/portable/videos/17a4e44f/tracks.csv",
+        "tracksJson": "storage/portable/videos/17a4e44f/tracks.json",
+        "trajectorySamplesCsv": "storage/portable/videos/17a4e44f/trajectory_samples.csv",
+        "trajectorySamplesJson": "storage/portable/videos/17a4e44f/trajectory_samples.json",
+        "timelineCsv": "storage/portable/videos/17a4e44f/timeline.csv",
+        "timelineJson": "storage/portable/videos/17a4e44f/timeline.json",
+        "wholeFootageLogCsv": "storage/portable/videos/17a4e44f/whole_footage_log.csv",
+        "wholeFootageLogJson": "storage/portable/videos/17a4e44f/whole_footage_log.json",
+        "severityBucketsCsv": "storage/portable/videos/17a4e44f/severity_buckets.csv",
+        "severityBucketsJson": "storage/portable/videos/17a4e44f/severity_buckets.json"
       }
     },
     {

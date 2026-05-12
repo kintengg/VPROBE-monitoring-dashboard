@@ -7,10 +7,9 @@ import { VideoPlayer } from "@/components/video/video-player"
 import { VideoMetadata } from "@/components/video/video-metadata"
 import { PlaybackTimeline } from "@/components/video/playback-timeline"
 import { EventFeed } from "@/components/surveillance/event-feed"
-import { AISearchBar } from "@/components/surveillance/ai-search-bar"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { AlertCircle, ArrowLeft, BarChart3, Car, Download, Footprints, Gauge, Loader2, LogIn, LogOut, OctagonAlert, Trash2, Users } from "lucide-react"
+import { AlertCircle, ArrowLeft, BarChart3, Car, Download, Gauge, Loader2, LogIn, LogOut, OctagonAlert, Trash2, User, Users } from "lucide-react"
 import { deleteVideo, getEvents, getLocations, getMediaUrl, getVideo, getVideoPlaybackPath, hasValidEntryExitPointsConfiguration, type EventRecord, type LocationRecord, type VideoDetailRecord, type VideoPedestrianTrackRecord, type VideoSeverityBucket } from "@/lib/api"
 import { useSetVideoDomain } from "@/components/video-domain-context"
 
@@ -760,6 +759,48 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
   ])
 
   const playbackSeverityBuckets = useMemo<VideoSeverityBucket[]>(() => {
+    // Vehicle videos: derive severity buckets from per-frame LOS rows in the RT-DETR
+    // congestion sidecar so the timeline color matches the in-video LOS overlay.
+    if (isVehicleVideo && vehicleCongestionRows.length > 0) {
+      const severityFromLos = (los: LOSLevel): "neutral" | "light" | "moderate" | "heavy" => {
+        if (los === "A" || los === "B") return "neutral"
+        if (los === "C") return "light"
+        if (los === "D") return "moderate"
+        return "heavy" // E, F
+      }
+      const buckets: VideoSeverityBucket[] = []
+      let segmentStart = vehicleCongestionRows[0].offsetSeconds
+      let currentSeverity = severityFromLos(vehicleCongestionRows[0].los)
+      let runningVcTotal = vehicleCongestionRows[0].vcRatio
+      let runningVcCount = 1
+      for (let index = 1; index < vehicleCongestionRows.length; index += 1) {
+        const row = vehicleCongestionRows[index]
+        const rowSeverity = severityFromLos(row.los)
+        if (rowSeverity !== currentSeverity) {
+          buckets.push({
+            startOffsetSeconds: segmentStart,
+            endOffsetSeconds: row.offsetSeconds,
+            severity: currentSeverity,
+            score: runningVcCount > 0 ? (runningVcTotal / runningVcCount) * 100 : null,
+          })
+          segmentStart = row.offsetSeconds
+          currentSeverity = rowSeverity
+          runningVcTotal = 0
+          runningVcCount = 0
+        }
+        runningVcTotal += row.vcRatio
+        runningVcCount += 1
+      }
+      const finalOffset = vehicleCongestionRows[vehicleCongestionRows.length - 1].offsetSeconds + 1
+      buckets.push({
+        startOffsetSeconds: segmentStart,
+        endOffsetSeconds: finalOffset,
+        severity: currentSeverity,
+        score: runningVcCount > 0 ? (runningVcTotal / runningVcCount) * 100 : null,
+      })
+      return buckets
+    }
+
     const backendBuckets = video?.severitySummary?.buckets ?? []
     if (backendBuckets.length > 0) {
       return backendBuckets
@@ -809,7 +850,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
     })
 
     return buckets
-  }, [portableTimelineRows, video?.severitySummary?.buckets])
+  }, [isVehicleVideo, portableTimelineRows, vehicleCongestionRows, video?.severitySummary?.buckets])
 
   const fallbackDurationSeconds = useMemo(() => {
     const timelineMaxOffset = portableTimelineRows.length > 0
@@ -867,7 +908,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
           cardClassName: "border-emerald-400/30 bg-gradient-to-br from-emerald-500/18 via-green-500/10 to-transparent",
         },
         {
-          icon: Footprints,
+          icon: User,
           value: String(liveDetectedPedestrians),
           caption: "Detected now",
           iconClassName: "bg-cyan-500 text-white ring-cyan-500/20",
@@ -1138,8 +1179,6 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
 
       {/* Right Sidebar - Filtered Event Feed */}
       <aside className="w-80 border-l border-border bg-card flex flex-col h-full">
-        <AISearchBar />
-
         {/* Vehicle Class Summary — vehicle videos only */}
         {isVehicleVideo && (
         <div className="border-b border-border p-4">
@@ -1194,6 +1233,7 @@ function VideoDetailContent({ params }: { params: Promise<{ id: string }> }) {
           events={orderedEvents}
           loading={loading}
           selectedEventId={selectedEventId}
+          domain={isVehicleVideo ? "vehicle" : "pedestrian"}
           onEventSelect={handleEventSelect}
         />
       </aside>
