@@ -143,6 +143,9 @@ def per_gate_los(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                == gate["normalizedName"]
         ]
         counts = los_module.aggregate_class_counts(gate_events, class_field="vehicleClass")
+        num_videos = len({e.get("videoId") for e in gate_events if e.get("videoId")})
+        if num_videos > 1:
+            counts = {k: int(round(v / num_videos)) for k, v in counts.items()}
         capacity = los_module.compute_capacity(
             road_length_km,
             int(lane_count or 0),
@@ -500,7 +503,12 @@ def vehicle_los_series(
 
         bucket = buckets.setdefault(bucket_key, {})
         gate_bucket = bucket.setdefault(gate_name, {})
-        gate_bucket[vehicle_class] = gate_bucket.get(vehicle_class, 0) + 1
+        counts_dict = gate_bucket.setdefault("counts", {})
+        counts_dict[vehicle_class] = counts_dict.get(vehicle_class, 0) + 1
+        videos_set = gate_bucket.setdefault("videos", set())
+        video_id = event.get("videoId")
+        if video_id:
+            videos_set.add(video_id)
 
     sorted_keys = sorted(buckets.keys())
     result = []
@@ -508,7 +516,11 @@ def vehicle_los_series(
         point: dict[str, Any] = {"id": key, "time": key}
         gate_data = buckets[key]
         for gate_name in all_gate_names:
-            counts = gate_data.get(gate_name, {})
+            gate_data_entry = gate_data.get(gate_name, {})
+            counts = gate_data_entry.get("counts", {})
+            num_videos = len(gate_data_entry.get("videos", set()))
+            if num_videos > 1:
+                counts = {k: int(round(v / num_videos)) for k, v in counts.items()}
             meta = gate_meta.get(gate_name, {"road_length_km": 0.0, "lane_count": 0})
             capacity = los_module.compute_capacity(
                 meta["road_length_km"], meta["lane_count"]

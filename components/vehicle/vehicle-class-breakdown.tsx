@@ -52,7 +52,7 @@ export function VehicleClassBreakdown({ rows }: VehicleClassBreakdownProps) {
               <div
                 key={row.className}
                 className={CLASS_COLORS[row.className] ?? "bg-slate-500"}
-                style={{ width: `${row.share * 100}%` }}
+                style={{ width: `${row.share * 100}%`, minWidth: `${row.share * 100}%`, maxWidth: `${row.share * 100}%` }}
                 title={`${row.label ?? row.className}: ${row.count} (${(row.share * 100).toFixed(0)}%)`}
               />
             ))}
