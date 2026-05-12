@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AlertCircle, Car, Footprints, LayoutDashboard, Loader2, RefreshCw } from "lucide-react"
+import { AlertCircle, Car, LayoutDashboard, Loader2, RefreshCw, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { FootageDatePicker } from "@/components/ui/footage-date-picker"
@@ -71,7 +71,7 @@ export default function UnifiedLandingPage() {
     try {
       const [vSummary, vTraffic, pSummary, pTraffic, pOcclusion] = await Promise.all([
         getVehicleSummary(date || undefined),
-        getVehicleTraffic(date || undefined, "whole-day", 60),
+        getVehicleTraffic(date || undefined, "whole-day", undefined, 60),
         getDashboardSummary(date || undefined),
         getDashboardTraffic(date || undefined, "whole-day"),
         getDashboardOcclusion(date || undefined, "whole-day"),
@@ -150,7 +150,7 @@ export default function UnifiedLandingPage() {
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <DomainStatCard
-            icon={<Footprints className="h-4 w-4" />}
+            icon={<User className="h-4 w-4" />}
             label="Pedestrians"
             value={String(totals.pedTotal)}
             sub={`Dominant LOS · ${totals.dominantPed ?? "—"}`}
@@ -168,7 +168,7 @@ export default function UnifiedLandingPage() {
             tone="veh"
           />
           <DomainStatCard
-            icon={<Footprints className="h-4 w-4" />}
+            icon={<User className="h-4 w-4" />}
             label="Walkways monitored"
             value={String(pedestrianLocations.length)}
             sub="Triangle pins on the map"

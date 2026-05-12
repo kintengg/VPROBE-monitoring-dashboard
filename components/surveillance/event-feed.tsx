@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AlertCircle, ArrowRight, Bike, BusFront, CarFront, Loader2, Truck, Van } from "lucide-react"
+import { AlertCircle, ArrowRight, Bike, BusFront, CarFront, Loader2, Truck, User, Van } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { EventRecord } from "@/lib/api"
@@ -14,46 +14,52 @@ interface EventFeedProps {
   events?: EventRecord[]
   loading?: boolean
   selectedEventId?: string
+  /**
+   * When set, the feed will only show events of the matching domain.
+   *  - "pedestrian": pedestrian detection events only
+   *  - "vehicle": vehicle-detection / vehicle-track events only
+   *  - undefined: show every event (used by the unified landing)
+   */
+  domain?: "pedestrian" | "vehicle"
   onEventSelect?: (event: EventRecord) => void
 }
 
-export function EventFeed({ filteredVideoId, events = [], loading = false, selectedEventId, onEventSelect }: EventFeedProps) {
+export function EventFeed({ filteredVideoId, events = [], loading = false, selectedEventId, domain, onEventSelect }: EventFeedProps) {
   const router = useRouter()
   const [selectedVehicleType, setSelectedVehicleType] = useState<string>("all")
 
   const vehicleTypeOptions = useMemo(() => {
     const types = new Set<string>()
     for (const event of events) {
-      // Include all vehicle-related event types in the filter dropdown
-      if (!isVehicleEvent(event)) {
-        continue
+      if (event.type === "vehicle-detection" || event.type === "vehicle-track") {
+        types.add(resolveVehicleType(event))
       }
-      types.add(resolveVehicleType(event))
     }
-
     return ["all", ...Array.from(types).sort((left, right) => left.localeCompare(right))]
   }, [events])
 
   const displayEvents = useMemo(() => {
-    // For the event feed, we only want to show vehicles that went OUT (gate crossings
-    // with direction "out"), plus any non-vehicle events (alerts, motion, etc.).
-    // We explicitly exclude "vehicle-track" events which represent "first seen" detections.
     const visibleEvents = events.filter((event) => {
-      if (event.type === "vehicle-track") {
-        // First-seen track events are excluded from the feed
-        return false
+      // Vehicle-track summaries shouldn't appear in the feed; only the actual gate crossings do.
+      if (event.type === "vehicle-track") return false
+      if (domain === "pedestrian") {
+        // Pedestrian pages only see pedestrian detections + alert / motion events.
+        return event.type === "detection" || event.type === "alert" || event.type === "motion"
       }
-      if (event.type === "vehicle-detection") {
-        // Only show gate-crossing events where direction is "out"
-        return event.direction === "out"
+      if (domain === "vehicle") {
+        // Vehicle pages only see gate crossings (regardless of raw direction).
+        return event.type === "vehicle-detection"
       }
-      // Keep all other event types (detection, alert, motion)
       return true
     })
 
     const filteredEvents = selectedVehicleType === "all"
       ? visibleEvents
-      : visibleEvents.filter((event) => isVehicleEvent(event) && resolveVehicleType(event) === selectedVehicleType)
+      : visibleEvents.filter(
+          (event) =>
+            (event.type === "vehicle-detection" || event.type === "vehicle-track") &&
+            resolveVehicleType(event) === selectedVehicleType,
+        )
 
     const sorted = filteredVideoId
       ? [...filteredEvents].sort((left, right) => {
@@ -65,7 +71,7 @@ export function EventFeed({ filteredVideoId, events = [], loading = false, selec
 
     // Limit to EVENT_FEED_LIMIT when not inside a specific video
     return filteredVideoId ? sorted : sorted.slice(0, EVENT_FEED_LIMIT)
-  }, [events, filteredVideoId, selectedVehicleType])
+  }, [domain, events, filteredVideoId, selectedVehicleType])
 
 
   const handleEventSelect = (event: EventRecord) => {
@@ -197,6 +203,37 @@ function formatEventDescription(description: string, vehicleType: string) {
     .replace(/Vehicle ID\s*#?\d+/gi, vehicleType)
 }
 
+// Mirrors backend/app/vehicle/gates.py — the canonical flow direction for each campus gate.
+const GATE_FLOW_GROUP: Record<string, "In" | "Out"> = {
+  "gate-2": "In",
+  "gate-2-9": "Out",
+  "gate-3": "In",
+  "gate-3-2": "Out",
+  "gate-3-5": "Out",
+}
+
+function normalizeGateKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[_]/g, "-")
+    .replace(/^gate-?/, "gate-")
+    .replace(/\./g, "-")
+}
+
+function gateFlowGroup(rawGateName: string | null | undefined): "In" | "Out" | null {
+  if (!rawGateName) return null
+  const key = normalizeGateKey(rawGateName)
+  if (GATE_FLOW_GROUP[key]) return GATE_FLOW_GROUP[key]
+  // Fallback: handle compact "gate2.9" / "gate2_9" by re-normalising digits
+  const compact = key.replace(/-/g, "")
+  for (const [canonical, flow] of Object.entries(GATE_FLOW_GROUP)) {
+    if (compact === canonical.replace(/-/g, "")) return flow
+  }
+  return null
+}
+
 function formatGateName(raw: string): string {
   // Normalise separators: "gate2", "gate_2", "gate-2", "gate 2" → tokens
   const tokens = raw
@@ -212,7 +249,6 @@ function formatGateName(raw: string): string {
 
 function isVehicleEvent(event: EventRecord): boolean {
   return (
-    event.type === "detection" ||
     event.type === "vehicle-detection" ||
     event.type === "vehicle-track"
   )
@@ -230,6 +266,7 @@ function EventCard({
   onSelect: () => void
 }) {
   const isVehicle = isVehicleEvent(event)
+  const isPedestrian = event.type === "detection"
   const vehicleType = resolveVehicleType(event)
   const VehicleIcon = resolveVehicleIcon(vehicleType)
 
@@ -246,7 +283,13 @@ function EventCard({
     >
       <div className="flex items-start gap-3">
         <div className="w-14 h-10 rounded-xl bg-[#1C1C1E] flex items-center justify-center shrink-0">
-          {isVehicle ? <VehicleIcon className="w-4 h-4 text-accent" /> : <AlertCircle className="w-4 h-4 text-chart-4" />}
+          {isVehicle ? (
+            <VehicleIcon className="w-4 h-4 text-accent" />
+          ) : isPedestrian ? (
+            <User className="w-4 h-4 text-accent" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-chart-4" />
+          )}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -260,7 +303,7 @@ function EventCard({
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {event.type === "vehicle-detection"
-              ? `${vehicleType} exited through ${event.gateName ? formatGateName(event.gateName) : "gate"}`
+              ? `${vehicleType} ${gateFlowGroup(event.gateName) === "In" ? "entered" : "exited"} through ${event.gateName ? formatGateName(event.gateName) : "gate"}`
               : formatEventDescription(event.description, vehicleType)}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">

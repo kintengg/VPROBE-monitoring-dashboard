@@ -66,7 +66,7 @@ export function VideoGrid({ locations, onAddVideoClick }: VideoGridProps) {
                   rawPath={video.rawPath}
                   processedPath={video.processedPath}
                   mediaUrl={getMediaUrl(getVideoPlaybackPath(video))}
-                  domain={location.domain}
+                  domain={location.domain ?? undefined}
                 />
               ))}
 

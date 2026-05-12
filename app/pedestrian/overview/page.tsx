@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { VideoGrid } from "@/components/surveillance/video-grid"
 import { EventFeed } from "@/components/surveillance/event-feed"
-import { AISearchBar } from "@/components/surveillance/ai-search-bar"
 import { AddLocationModal } from "@/components/surveillance/add-location-modal"
 import { AddVideoModal } from "@/components/surveillance/add-video-modal"
 import { LocationMap } from "@/components/surveillance/location-map"
@@ -411,12 +410,11 @@ function SurveillancePageContent() {
 
       {/* Right Sidebar */}
       <aside className="w-80 border-l border-border bg-card/30 flex flex-col h-full">
-        <AISearchBar />
-        {/* Location Map - Below Search Bar */}
-        <div className="px-4 pb-4">
-          <LocationMap locations={filteredLocations} />
+        {/* Campus OSM Map — same component the pedestrian dashboard uses. */}
+        <div className="p-4">
+          <LocationMap locations={filteredLocations} selectedDate={selectedDate || undefined} />
         </div>
-        <EventFeed events={events} loading={eventsLoading} />
+        <EventFeed events={events} loading={eventsLoading} domain="pedestrian" />
       </aside>
 
       {/* Modals */}
@@ -431,6 +429,7 @@ function SurveillancePageContent() {
         onOpenChange={handleVideoModalChange}
         locations={locations.map((location) => ({ id: location.id, name: location.name }))}
         initialLocationId={selectedUploadLocationId}
+        domain="pedestrian"
         onAddVideo={handleAddVideo}
       />
       <AlertDialog open={Boolean(pendingDeleteLocation)} onOpenChange={(open) => !open && setPendingDeleteLocation(null)}>

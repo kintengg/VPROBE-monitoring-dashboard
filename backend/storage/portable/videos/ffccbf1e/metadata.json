@@ -1,18 +1,20 @@
 {
-  "generatedAt": "2026-05-10T06:09:45Z",
+  "generatedAt": "2026-05-12T06:07:55Z",
   "video": {
-    "id": "73c1ecaf",
+    "id": "ffccbf1e",
     "locationId": "edsa-sec-walk",
     "location": "EDSA Sec Walk",
-    "timestamp": "10:00:00",
-    "date": "2026-05-10",
-    "startTime": "10:00:00",
-    "endTime": "10:00:59",
+    "timestamp": "11:05:51",
+    "date": "2026-05-12",
+    "startTime": "11:05:51",
+    "endTime": "11:05:51",
     "gpsLat": 14.6397,
     "gpsLng": 121.0775,
     "pedestrianCount": 59,
-    "rawPath": "storage/videos/raw/97682f68-0301.mp4",
-    "processedPath": "storage/videos/processed/73c1ecaf/97682f68-0301.mp4"
+    "rawPath": "storage/videos/raw/d0a413b5-0301.mp4",
+    "processedPath": "storage/videos/processed/ffccbf1e/d0a413b5-0301.mp4",
+    "roadLengthM": null,
+    "laneCount": null
   },
   "location": {
     "id": "edsa-sec-walk",
@@ -160,8 +162,8 @@
     "eventCount": 50,
     "trackCount": 59,
     "trajectorySampleCount": 280,
-    "timelineRowCount": 59,
-    "wholeFootageLogRowCount": 217,
+    "timelineRowCount": 60,
+    "wholeFootageLogRowCount": 223,
     "severityBucketCount": 8
   },
   "severitySummary": {
@@ -170,51 +172,51 @@
     "buckets": [
       {
         "startOffsetSeconds": 0.0,
-        "endOffsetSeconds": 2.458,
+        "endOffsetSeconds": 2.5,
         "severity": "light",
         "score": 28.69
       },
       {
-        "startOffsetSeconds": 2.458,
-        "endOffsetSeconds": 9.833,
+        "startOffsetSeconds": 2.5,
+        "endOffsetSeconds": 10.0,
         "severity": "moderate",
         "score": 48.82
       },
       {
-        "startOffsetSeconds": 9.833,
-        "endOffsetSeconds": 22.125,
+        "startOffsetSeconds": 10.0,
+        "endOffsetSeconds": 22.5,
         "severity": "light",
         "score": 22.76
       },
       {
-        "startOffsetSeconds": 22.125,
-        "endOffsetSeconds": 29.5,
+        "startOffsetSeconds": 22.5,
+        "endOffsetSeconds": 30.0,
         "severity": "moderate",
         "score": 47.14
       },
       {
-        "startOffsetSeconds": 29.5,
-        "endOffsetSeconds": 34.417,
+        "startOffsetSeconds": 30.0,
+        "endOffsetSeconds": 35.0,
         "severity": "light",
-        "score": 28.69
+        "score": 29.22
       },
       {
-        "startOffsetSeconds": 34.417,
-        "endOffsetSeconds": 39.333,
+        "startOffsetSeconds": 35.0,
+        "endOffsetSeconds": 37.5,
         "severity": "moderate",
-        "score": 35.79
+        "score": 39.35
       },
       {
-        "startOffsetSeconds": 39.333,
-        "endOffsetSeconds": 51.625,
+        "startOffsetSeconds": 37.5,
+        "endOffsetSeconds": 52.5,
         "severity": "light",
-        "score": 27.32
+        "score": 28.63
       },
       {
-        "startOffsetSeconds": 51.625,
-        "endOffsetSeconds": 59.0,
+        "startOffsetSeconds": 52.5,
+        "endOffsetSeconds": 60.0,
         "severity": "moderate",
-        "score": 47.64
+        "score": 46.98
       }
     ]
   }

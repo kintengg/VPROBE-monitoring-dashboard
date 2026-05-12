@@ -1,0 +1,27 @@
+[
+  {
+    "videoId": "17a4e44f",
+    "offsetSeconds": 0,
+    "videoTime": "00:00:00",
+    "observedAt": "2026-05-12T14:18:51",
+    "clockTime": "14:18:51",
+    "visiblePedestrians": 0,
+    "detectedNow": 0,
+    "cumulativeUniquePedestrians": 0,
+    "totalPedestriansSoFar": 0,
+    "lightOcclusionCount": 0,
+    "moderateOcclusionCount": 0,
+    "heavyOcclusionCount": 0,
+    "occlusionValue": 0.0,
+    "ptsiScore": 0.0,
+    "los": null,
+    "losDescription": null,
+    "severity": "neutral",
+    "mode": "roi-testing",
+    "walkableAreaM2": null,
+    "roiAreaRatio": 1.0,
+    "capacityProxy": 24.0,
+    "congestionScore": 0.0,
+    "spacePerPedestrianM2": null
+  }
+]

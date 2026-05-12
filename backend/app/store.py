@@ -1013,8 +1013,9 @@ def seed_state() -> dict[str, Any]:
             {
                 "id": "gate-1-walkway",
                 "name": "Gate 1 Walkway",
-                "latitude": 14.6418,
-                "longitude": 121.0758,
+                # 14°38'04.7"N 121°04'29.3"E
+                "latitude": 14.634639,
+                "longitude": 121.074806,
                 "description": "Approximate Gate 1 walkway camera anchor.",
                 "address": "Ateneo de Manila University · Gate 1",
                 "roiCoordinates": None,
