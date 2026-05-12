@@ -344,7 +344,7 @@ def vehicle_analytics_series(
     buckets: "dict[str, dict[str, Any]]" = {}
     all_gates: "set[str]" = set()
 
-    for event in gate_events:
+    for event in events:
         offset_seconds = float(event.get("offsetSeconds") or 0)
         video_clock = video_start_by_id.get(str(event.get("videoId"))) or event.get("timestamp") or "00:00"
         start_min = _parse_time_to_minutes(str(video_clock))
