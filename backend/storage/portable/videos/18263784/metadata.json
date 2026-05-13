@@ -1,0 +1,223 @@
+{
+  "generatedAt": "2026-05-13T04:14:37Z",
+  "video": {
+    "id": "18263784",
+    "locationId": "edsa-sec-walk",
+    "location": "EDSA Sec Walk",
+    "timestamp": "12:13:51",
+    "date": "2026-05-13",
+    "startTime": "12:13:51",
+    "endTime": "12:13:51",
+    "gpsLat": 14.6397,
+    "gpsLng": 121.0775,
+    "pedestrianCount": 59,
+    "rawPath": "storage/videos/raw/866ac82a-0301.mp4",
+    "processedPath": "storage/videos/processed/18263784/866ac82a-0301.mp4",
+    "roadLengthM": null,
+    "laneCount": null
+  },
+  "location": {
+    "id": "edsa-sec-walk",
+    "name": "EDSA Sec Walk",
+    "latitude": 14.6397,
+    "longitude": 121.0775,
+    "description": "Approximate Xavier Hall camera anchor along the EDSA security walkway.",
+    "address": "Ateneo de Manila University \u00b7 Xavier Hall",
+    "roiCoordinates": {
+      "referenceSize": [
+        1920,
+        1080
+      ],
+      "includePolygonsNorm": [
+        [
+          [
+            0.24587,
+            0.988037
+          ],
+          [
+            0.995651,
+            0.997306
+          ],
+          [
+            0.219792,
+            0.098426
+          ],
+          [
+            0.196354,
+            0.101481
+          ]
+        ],
+        [
+          [
+            0.432646,
+            0.337861
+          ],
+          [
+            0.564266,
+            0.309009
+          ],
+          [
+            0.544432,
+            0.472491
+          ],
+          [
+            0.487635,
+            0.403574
+          ]
+        ],
+        [
+          [
+            0.221693,
+            0.09425
+          ],
+          [
+            0.346099,
+            0.244907
+          ],
+          [
+            0.344297,
+            0.187213
+          ]
+        ]
+      ]
+    },
+    "entryExitPoints": {
+      "referenceSize": [
+        1920,
+        1080
+      ],
+      "gateDirectionZonesNorm": {
+        "strip_0": [
+          [
+            0.741958,
+            0.623528
+          ],
+          [
+            0.222411,
+            0.813509
+          ],
+          [
+            0.217198,
+            0.767167
+          ],
+          [
+            0.716766,
+            0.594185
+          ]
+        ],
+        "strip_1": [
+          [
+            0.785417,
+            0.682222
+          ],
+          [
+            0.231094,
+            0.915463
+          ],
+          [
+            0.227604,
+            0.884537
+          ],
+          [
+            0.768021,
+            0.668333
+          ]
+        ],
+        "strip_2": [
+          [
+            0.860104,
+            0.768704
+          ],
+          [
+            0.253589,
+            1.0
+          ],
+          [
+            0.242292,
+            0.99963
+          ],
+          [
+            0.239786,
+            0.96487
+          ],
+          [
+            0.842708,
+            0.74713
+          ]
+        ]
+      },
+      "directionMapping": {
+        "path_0_1_2": "exiting",
+        "path_2_1_0": "entering"
+      }
+    },
+    "walkableAreaM2": null,
+    "domain": null,
+    "roadLengthM": null,
+    "laneCount": null,
+    "flowGroup": null
+  },
+  "counts": {
+    "pedestrianCount": 59,
+    "eventCount": 50,
+    "trackCount": 59,
+    "trajectorySampleCount": 280,
+    "timelineRowCount": 60,
+    "wholeFootageLogRowCount": 223,
+    "severityBucketCount": 8
+  },
+  "severitySummary": {
+    "bucketCount": 24,
+    "sampledSeconds": 60,
+    "buckets": [
+      {
+        "startOffsetSeconds": 0.0,
+        "endOffsetSeconds": 2.5,
+        "severity": "light",
+        "score": 28.69
+      },
+      {
+        "startOffsetSeconds": 2.5,
+        "endOffsetSeconds": 10.0,
+        "severity": "moderate",
+        "score": 48.82
+      },
+      {
+        "startOffsetSeconds": 10.0,
+        "endOffsetSeconds": 22.5,
+        "severity": "light",
+        "score": 22.76
+      },
+      {
+        "startOffsetSeconds": 22.5,
+        "endOffsetSeconds": 30.0,
+        "severity": "moderate",
+        "score": 47.14
+      },
+      {
+        "startOffsetSeconds": 30.0,
+        "endOffsetSeconds": 35.0,
+        "severity": "light",
+        "score": 29.22
+      },
+      {
+        "startOffsetSeconds": 35.0,
+        "endOffsetSeconds": 37.5,
+        "severity": "moderate",
+        "score": 39.35
+      },
+      {
+        "startOffsetSeconds": 37.5,
+        "endOffsetSeconds": 52.5,
+        "severity": "light",
+        "score": 28.63
+      },
+      {
+        "startOffsetSeconds": 52.5,
+        "endOffsetSeconds": 60.0,
+        "severity": "moderate",
+        "score": 46.98
+      }
+    ]
+  }
+}
