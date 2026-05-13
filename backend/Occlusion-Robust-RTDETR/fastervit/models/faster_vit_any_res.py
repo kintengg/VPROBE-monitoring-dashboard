@@ -1041,6 +1041,7 @@ def faster_vit_0_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
@@ -1078,6 +1079,7 @@ def faster_vit_1_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
@@ -1115,6 +1117,7 @@ def faster_vit_2_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
@@ -1156,6 +1159,7 @@ def faster_vit_3_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
@@ -1198,6 +1202,7 @@ def faster_vit_4_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
@@ -1240,6 +1245,7 @@ def faster_vit_5_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
@@ -1282,6 +1288,7 @@ def faster_vit_6_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
@@ -1324,6 +1331,7 @@ def faster_vit_4_21k_224_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
@@ -1366,6 +1374,7 @@ def faster_vit_4_21k_384_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
@@ -1408,6 +1417,7 @@ def faster_vit_4_21k_512_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
@@ -1450,6 +1460,7 @@ def faster_vit_4_21k_768_any_res(pretrained=False, **kwargs):
     model.default_cfg = model.pretrained_cfg
     if pretrained:
         if not Path(model_path).is_file():
+            Path(model_path).parent.mkdir(parents=True, exist_ok=True)
             url = model.default_cfg['url']
             torch.hub.download_url_to_file(url=url, dst=model_path)
         model._load_state_dict(model_path)
