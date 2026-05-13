@@ -22,6 +22,8 @@ import supervision as sv
 import csv
 from pathlib import Path
 from datetime import datetime
+import subprocess
+import shutil
 from traffic_congestion import TrafficCongestionEstimator, RealtimeTrafficCongestionEstimator
 
 def format_video_timestamp(frame_number, fps):
@@ -692,14 +694,40 @@ def process_video(args):
 
     print(f"Video info: {width}x{height} at {fps} FPS, {total_frames} frames")
 
-    # Setup output video writer (optional)
-    out = None
+    # Setup output video writer via ffmpeg pipe (H.264, browser-playable).
+    # Piping raw BGR frames to ffmpeg gives us full control over codec and
+    # bitrate, avoiding the bloated mp4v output that OpenCV's VideoWriter
+    # produces (which was ~4x the input file size).
+    ffmpeg_proc = None
     if args.output:
-        output_suffix = str(Path(args.output).suffix).lower()
-        # Prefer MP4-compatible codec when writing .mp4 files.
-        fourcc = cv2.VideoWriter_fourcc(*('mp4v' if output_suffix == '.mp4' else 'XVID'))
-        out = cv2.VideoWriter(args.output, fourcc, fps, (output_width, output_height))
-        print(f"Will save output to: {args.output}")
+        ffmpeg_bin = shutil.which("ffmpeg")
+        if not ffmpeg_bin:
+            print(f"Warning: ffmpeg not found — video output will be skipped.", file=sys.stderr)
+        else:
+            ffmpeg_cmd = [
+                ffmpeg_bin,
+                "-y",
+                "-f", "rawvideo",
+                "-vcodec", "rawvideo",
+                "-pix_fmt", "bgr24",
+                "-s", f"{output_width}x{output_height}",
+                "-r", str(fps),
+                "-i", "-",
+                "-c:v", "libx264",
+                "-preset", "fast",
+                "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                "-an",
+                str(args.output),
+            ]
+            ffmpeg_proc = subprocess.Popen(
+                ffmpeg_cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            print(f"Will save output to: {args.output}")
 
     # Initialize tracking if enabled
     tracker = None
@@ -1038,9 +1066,9 @@ def process_video(args):
                             output_frame = cv2.copyMakeBorder(annotated_frame, 0, 0, 0, sidebar_width, cv2.BORDER_CONSTANT, value=(40, 40, 40))
                             output_frame = draw_sidebar_panel(output_frame, line_zones, class_names, congestion_status, congestion_mode, sidebar_width)
                         
-                        if out is not None:
-                            out.write(output_frame)
-                        
+                        if ffmpeg_proc is not None:
+                            ffmpeg_proc.stdin.write(output_frame.tobytes())
+
                         if args.display:
                             cv2.imshow('RT-DETR Video Inference - Press Q to quit', output_frame)
                             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -1245,16 +1273,17 @@ def process_video(args):
                             output_frame = cv2.copyMakeBorder(annotated_frame, 0, 0, 0, sidebar_width, cv2.BORDER_CONSTANT, value=(40, 40, 40))
                             output_frame = draw_sidebar_panel(output_frame, line_zones, class_names, congestion_status, congestion_mode, sidebar_width)
                         
-                        if out is not None:
-                            out.write(output_frame)
+                        if ffmpeg_proc is not None:
+                            ffmpeg_proc.stdin.write(output_frame.tobytes())
                         
                         if args.display:
                             cv2.imshow('RT-DETR Video Inference - Press Q to quit', output_frame)
                             if cv2.waitKey(1) & 0xFF == ord('q'):
                                 print("\nStopping inference (user pressed 'q')")
                                 cap.release()
-                                if out is not None:
-                                    out.release()
+                                if ffmpeg_proc is not None:
+                                    ffmpeg_proc.stdin.close()
+                                    ffmpeg_proc.wait()
                                 pbar.close()
                                 cv2.destroyAllWindows()
                                 return
@@ -1494,8 +1523,8 @@ def process_video(args):
                 output_frame = draw_sidebar_panel(output_frame, line_zones, class_names, congestion_status, congestion_mode, sidebar_width)
 
             # Write frame to output video (if saving)
-            if out is not None:
-                out.write(output_frame)
+            if ffmpeg_proc is not None:
+                ffmpeg_proc.stdin.write(output_frame.tobytes())
 
             # Display frame in real-time only when explicitly enabled.
             if args.display:
@@ -1513,9 +1542,16 @@ def process_video(args):
     
     pbar.close()
     cap.release()
-    if out is not None:
-        out.release()
-        print(f"Video processing complete. Output saved to: {args.output}")
+    if ffmpeg_proc is not None:
+        ffmpeg_proc.stdin.close()
+        ffmpeg_proc.wait()
+        if ffmpeg_proc.returncode != 0:
+            stderr_output = ffmpeg_proc.stderr.read().decode(errors="replace") if ffmpeg_proc.stderr else ""
+            print(f"Warning: ffmpeg exited with code {ffmpeg_proc.returncode}. stderr:\n{stderr_output[-500:]}", file=sys.stderr)
+        else:
+            print(f"Video processing complete. Output saved to: {args.output}")
+    elif ffmpeg_proc is None and args.output:
+        print("Video processing complete. No output file saved (ffmpeg not available).")
     else:
         print("Video processing complete. No output file saved (display only).")
 
