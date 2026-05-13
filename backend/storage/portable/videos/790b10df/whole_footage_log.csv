@@ -1,2 +1,0 @@
-videoId,offsetSeconds,videoTime,observedAt,clockTime,visiblePedestrians,detectedNow,cumulativeUniquePedestrians,totalPedestriansSoFar,lightOcclusionCount,moderateOcclusionCount,heavyOcclusionCount,trackKey,trackId,pedestrianId,occlusionClass,occlusionLabel,insideROI
-790b10df,0,00:00:00,2026-05-13T12:14:51,12:14:51,0,0,0,0,0,0,0,,,,,,false

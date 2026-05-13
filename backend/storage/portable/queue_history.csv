@@ -1,3 +1,0 @@
-uploadId,state,progressPercent,message,phase,videoId,error,fileName,locationId,locationName,date,startTime,endTime,fastMode,createdAt,startedAt,completedAt,updatedAt
-e6311aac-4fef-40a5-a7ca-a1c06cbe236b,complete,100,Video upload and processing complete.,ptsi,18263784,,0301.mp4,edsa-sec-walk,EDSA Sec Walk,2026-05-13,12:13:51,12:13:51,,2026-05-13T04:13:25Z,2026-05-13T04:13:25Z,2026-05-13T04:14:37Z,2026-05-13T04:14:37Z
-a436a019-9f08-45df-8541-8f9574af8a6c,complete,100,Video upload and processing complete.,finalizing,790b10df,,6to6_g29---2min.mp4,gate-2-9,Gate 2.9,2026-05-13,12:14:51,12:14:51,,2026-05-13T04:14:19Z,2026-05-13T04:14:19Z,2026-05-13T04:16:01Z,2026-05-13T04:16:01Z
