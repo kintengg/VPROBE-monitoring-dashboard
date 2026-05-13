@@ -57,7 +57,10 @@ export function UnifiedTrafficChart({
     for (const point of pedestrianTraffic?.series ?? []) {
       const time = String(point.time ?? "")
       if (!time) continue
-      const inCount = pedSeriesKey(point as Record<string, unknown>, ["In", "in", "entries", "cumulativeUniquePedestrians"])
+      // Prefer the per-bucket count so the line drops back to 0 after each
+      // bucket's activity ends — falling back to cumulative only as a last
+      // resort for older API payloads.
+      const inCount = pedSeriesKey(point as Record<string, unknown>, ["In", "in", "entries", "uniqueInBucket", "cumulativeUniquePedestrians"])
       const outCount = pedSeriesKey(point as Record<string, unknown>, ["Out", "out", "exits"])
       const slot = byTime.get(time) ?? { time }
       slot.pedIn = inCount

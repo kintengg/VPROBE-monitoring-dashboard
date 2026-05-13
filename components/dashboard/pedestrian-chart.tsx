@@ -22,7 +22,7 @@ interface PedestrianChartProps {
   timeRange: string
   selectedDate: string
   data: TrafficPoint[]
-  metricKey: "cumulativeUniquePedestrians" | "averageVisiblePedestrians"
+  metricKey: "cumulativeUniquePedestrians" | "uniqueInBucket" | "averageVisiblePedestrians"
   metricLabel: string
   seriesColor: string
   locationTotals?: LocationTotal[]
@@ -38,7 +38,7 @@ interface PedestrianChartProps {
 }
 
 const SERIES_COLORS = ["#22C55E", "#06B6D4", "#3B82F6", "#F59E0B", "#A855F7"]
-const RESERVED_SERIES_KEYS = new Set(["id", "time", "cumulativeUniquePedestrians", "averageVisiblePedestrians"])
+const RESERVED_SERIES_KEYS = new Set(["id", "time", "cumulativeUniquePedestrians", "uniqueInBucket", "averageVisiblePedestrians"])
 
 function formatTimeRangeLabel(timeRange: string) {
   return timeRange
@@ -127,14 +127,20 @@ export function PedestrianChart({
   const locationSeries = Array.from(
     new Set([
       ...locationTotals.map((item) => item.location),
-      ...data.flatMap((point) => Object.keys(point).filter((key) => !RESERVED_SERIES_KEYS.has(key))),
+      // Auto-detect per-location keys, but skip the `__cumulative` companion
+      // fields that mirror each location's running total.
+      ...data.flatMap((point) =>
+        Object.keys(point).filter((key) => !RESERVED_SERIES_KEYS.has(key) && !key.endsWith("__cumulative")),
+      ),
     ]),
   ).map((location, index) => ({
     key: location,
     color: SERIES_COLORS[index % SERIES_COLORS.length],
   }))
 
-  const showLocationBreakdown = metricKey === "cumulativeUniquePedestrians" && locationSeries.length > 0
+  const showLocationBreakdown =
+    (metricKey === "cumulativeUniquePedestrians" || metricKey === "uniqueInBucket")
+    && locationSeries.length > 0
 
   const totals = locationTotals.map((item, index) => ({
     location: item.location,

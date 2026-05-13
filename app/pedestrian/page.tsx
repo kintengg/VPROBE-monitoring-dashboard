@@ -45,7 +45,8 @@ import {
 export default function DashboardPage() {
   const router = useRouter()
   const { settledUploadsVersion } = useUploadQueue()
-  const [selectedDate, setSelectedDate] = useState("2026-03-15")
+  const [selectedDate, setSelectedDate] = useState("")
+  const [autoDateApplied, setAutoDateApplied] = useState(false)
   const [timeRange, setTimeRange] = useState("whole-day")
   const [hourFilter, setHourFilter] = useState("all")
   const [focusTime, setFocusTime] = useState<string | undefined>(undefined)
@@ -110,11 +111,21 @@ export default function DashboardPage() {
     try {
       const response = await getLocations({ domain: "pedestrian" })
       setLocations(response)
-      setFootageDates(Array.from(new Set(response.flatMap((location) => location.videos.map((video) => video.date)))).sort())
+      const dates = Array.from(new Set(response.flatMap((location) => location.videos.map((video) => video.date)))).sort()
+      setFootageDates(dates)
+      // First time we receive footage dates, auto-select the latest one with
+      // inferred data so the dashboard isn't anchored to a hardcoded day.
+      if (!autoDateApplied && dates.length > 0) {
+        const latest = dates[dates.length - 1]
+        if (latest) {
+          setSelectedDate((current) => (current ? current : latest))
+        }
+        setAutoDateApplied(true)
+      }
     } catch {
       // Leave existing date highlights untouched if this auxiliary request fails.
     }
-  }, [])
+  }, [autoDateApplied])
 
   useEffect(() => {
     void loadDashboard()
@@ -383,12 +394,12 @@ export default function DashboardPage() {
         {/* Charts now span the full page width below the map. */}
         <div className="space-y-6">
           <PedestrianChart
-            title="Estimated Unique Tracked Pedestrians (Per location)"
-            description="Estimated cumulative unique tracked pedestrian count for each location over the selected timeline."
+            title="Unique Pedestrians per Bucket (Per location)"
+            description="New unique tracked pedestrians observed within each time bucket, broken down by location."
             timeRange={timeRange}
             selectedDate={selectedDate}
             data={traffic?.series ?? []}
-            metricKey="cumulativeUniquePedestrians"
+            metricKey="uniqueInBucket"
             metricLabel="Unique Pedestrians"
             seriesColor="#22C55E"
             locationTotals={traffic?.locationTotals ?? []}

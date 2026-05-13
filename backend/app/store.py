@@ -2482,11 +2482,22 @@ def _traffic_series_from_samples(
     running_total_by_location = dict(baseline_unique_by_location)
     for index, point in enumerate(series):
         running_total += first_seen_counts[index]
+        # Keep `cumulativeUniquePedestrians` as the running total for callers
+        # that genuinely want a cumulative line (e.g., daily totals).
         point["cumulativeUniquePedestrians"] = running_total
+        # `uniqueInBucket` is the count of pedestrians first seen during this
+        # bucket — the chart series that should rise during activity and drop
+        # back to 0 afterwards.
+        point["uniqueInBucket"] = first_seen_counts[index]
         point["averageVisiblePedestrians"] = round(visible_totals[index] / sample_counts[index], 2) if sample_counts[index] else 0.0
         for location in location_names:
             running_total_by_location[location] += first_seen_counts_by_location[location][index]
-            point[location] = running_total_by_location[location]
+            # Per-location key now holds the *per-bucket* count so the line
+            # drops back down after the activity passes. The cumulative
+            # per-location value is exposed alongside via `<location>__cumulative`
+            # for any future consumer that needs a running total.
+            point[location] = first_seen_counts_by_location[location][index]
+            point[f"{location}__cumulative"] = running_total_by_location[location]
 
     return series
 
