@@ -1,0 +1,71 @@
+eventId,videoId,type,location,clockTime,offsetSeconds,videoTime,pedestrianId,frame,occlusionClass,occlusionLabel,description
+08636afd-8f1e-4708-9b4e-623ae31c7cd0,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Tricycle #7 first seen at 0.0s, last seen at 50.0s"
+1bcb0440-b043-49ba-a250-029e18773fb5,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #4 first seen at 0.0s, last seen at 48.0s"
+1c3fe87d-b167-462c-9d5b-a21898958e38,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #13 first seen at 0.0s, last seen at 46.0s"
+25c2a532-1c3b-4c7f-943a-de9ded9e9368,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #3 first seen at 0.0s, last seen at 47.0s"
+2eea041d-92ed-4e9a-9038-4c09820a78f1,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #9 first seen at 0.0s, last seen at 57.0s"
+478bec4a-87b7-4052-b935-be9b9d99d35d,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Van #1 first seen at 0.0s, last seen at 43.0s"
+5db93822-e356-4aa2-8866-dc143606e150,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #14 first seen at 0.0s, last seen at 73.0s"
+5dc84926-d21b-4f6b-bab3-24a30ffd5524,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #2 first seen at 0.0s, last seen at 43.0s"
+80fb6904-efb2-4a3f-b2c5-ae9d907c21ff,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #10 first seen at 0.0s, last seen at 61.0s"
+94c2229a-d2f7-4577-9648-702efa81977f,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #11 first seen at 0.0s, last seen at 60.0s"
+bd155cf3-a5f3-44f6-a1b1-16ea8e6bfad5,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Van #8 first seen at 0.0s, last seen at 56.0s"
+c2c5cb31-2854-458f-b4a9-26cf1f94c4bc,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #12 first seen at 0.0s, last seen at 70.0s"
+f180e65a-3696-49a0-8862-5f62a73e62d5,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #6 first seen at 0.0s, last seen at 54.0s"
+f9c0ff78-fa41-4dda-9cd1-d2e4654566f6,790b10df,vehicle-track,Gate 2.9,12:14:51,0.0,00:00:00,,1,,,"Car #5 first seen at 0.0s, last seen at 51.0s"
+28dccb14-8e69-4cab-802f-528fd3d85c31,790b10df,vehicle-track,Gate 2.9,12:14:51,2.0,00:00:02,,37,,,"Motorcycle #15 first seen at 2.0s, last seen at 8.0s"
+ba71ffce-d885-4a6b-9e28-2cf6ea30643c,790b10df,vehicle-track,Gate 2.9,12:14:51,6.0,00:00:06,,97,,,"Car #16 first seen at 6.0s, last seen at 26.0s"
+8d93bbf8-5dff-4faa-97b6-892c2a696f87,790b10df,vehicle-track,Gate 2.9,12:14:51,14.0,00:00:14,,217,,,"Car #17 first seen at 14.0s, last seen at 22.0s"
+2d0b37e2-46de-47d0-8cad-4e3c6d1a3a13,790b10df,vehicle-track,Gate 2.9,12:14:51,21.0,00:00:21,,323,,,"Car #19 first seen at 21.0s, last seen at 24.0s"
+a3a8449f-89e3-4778-b990-69ddf9b07b8b,790b10df,vehicle-track,Gate 2.9,12:14:51,21.0,00:00:21,,319,,,"Car #18 first seen at 21.0s, last seen at 22.0s"
+13d5d1df-6346-47f0-aeb9-a9164ca81dc8,790b10df,vehicle-track,Gate 2.9,12:14:51,24.0,00:00:24,,374,,,"Car #21 first seen at 24.0s, last seen at 25.0s"
+7d101fad-68cb-4014-bab8-cfb426a4a261,790b10df,vehicle-track,Gate 2.9,12:14:51,24.0,00:00:24,,362,,,"Car #20 first seen at 24.0s, last seen at 63.0s"
+0cfaff52-4e70-421e-99b4-9829ca42c3d0,790b10df,vehicle-track,Gate 2.9,12:14:51,30.0,00:00:30,,463,,,"Car #22 first seen at 30.0s, last seen at 39.0s"
+741f2b98-fc06-4d79-8a4a-3e51295ecfd4,790b10df,vehicle-track,Gate 2.9,12:14:51,31.0,00:00:31,,470,,,"Van #23 first seen at 31.0s, last seen at 75.0s"
+a365694e-32f5-4547-ab55-95bf5154583c,790b10df,vehicle-track,Gate 2.9,12:14:51,36.0,00:00:36,,552,,,"Car #24 first seen at 36.0s, last seen at 82.0s"
+80499cf5-2a29-4b6f-8e74-d186cd1c56dc,790b10df,vehicle-track,Gate 2.9,12:14:51,40.0,00:00:40,,606,,,"Car #25 first seen at 40.0s, last seen at 41.0s"
+0d5dff2f-f753-488c-a228-91e67d1f7ffe,790b10df,vehicle-track,Gate 2.9,12:14:51,41.0,00:00:41,,627,,,"Car #26 first seen at 41.0s, last seen at 64.0s"
+df07b9ca-8678-4fcb-a29c-7cfea8cddb2f,790b10df,vehicle-detection,Gate 2.9,12:14:51,41.0,00:00:41,,621,,,Car crossing gate2.9 (out)
+27d154e9-7a70-472b-8130-cefc320a4747,790b10df,vehicle-track,Gate 2.9,12:14:51,42.0,00:00:42,,635,,,"Car #27 first seen at 42.0s, last seen at 72.0s"
+fc6250c1-062e-40b6-80d4-49eaa58fc7b4,790b10df,vehicle-track,Gate 2.9,12:14:51,44.0,00:00:44,,665,,,"Car #28 first seen at 44.0s, last seen at 76.0s"
+175bc2ba-a094-4a63-b378-428a082065e6,790b10df,vehicle-track,Gate 2.9,12:14:51,45.0,00:00:45,,679,,,"Car #29 first seen at 45.0s, last seen at 45.0s"
+40eabed9-5876-41d9-ac9c-7ba95d6b306e,790b10df,vehicle-detection,Gate 2.9,12:14:51,45.0,00:00:45,,680,,,Car crossing gate2.9 (out)
+2c3de831-219f-4ca3-99d6-32f568a05ce2,790b10df,vehicle-track,Gate 2.9,12:14:51,46.0,00:00:46,,697,,,"Van #30 first seen at 46.0s, last seen at 46.0s"
+b5776b53-e918-4c5d-b789-1f63027c1c8d,790b10df,vehicle-detection,Gate 2.9,12:14:51,46.0,00:00:46,,699,,,Car crossing gate2.9 (out)
+d348aaf3-7693-4732-8517-cfcd2b2ac257,790b10df,vehicle-track,Gate 2.9,12:14:51,46.0,00:00:46,,703,,,"Van #31 first seen at 46.0s, last seen at 46.0s"
+eb46a540-465a-41c6-a345-becda23e1873,790b10df,vehicle-track,Gate 2.9,12:14:51,47.0,00:00:47,,709,,,"Car #32 first seen at 47.0s, last seen at 47.0s"
+0ec04658-94ae-459a-af5d-86d2d740f817,790b10df,vehicle-detection,Gate 2.9,12:14:51,49.0,00:00:49,,744,,,Tricycle crossing gate2.9 (out)
+502d0038-5799-42e1-9ff0-254cd0f003a8,790b10df,vehicle-detection,Gate 2.9,12:14:51,49.0,00:00:49,,736,,,Car crossing gate2.9 (out)
+d4641429-d73f-4e8c-9cc4-98fd4321b64d,790b10df,vehicle-track,Gate 2.9,12:14:51,50.0,00:00:50,,753,,,"Car #33 first seen at 50.0s, last seen at 69.0s"
+04dd371b-c588-43ed-98e2-71d6445c2199,790b10df,vehicle-track,Gate 2.9,12:14:51,52.0,00:00:52,,783,,,"Van #34 first seen at 52.0s, last seen at 52.0s"
+0d5375b3-a127-4883-a698-6eded3bd0dcb,790b10df,vehicle-detection,Gate 2.9,12:14:51,52.0,00:00:52,,787,,,Car crossing gate2.9 (out)
+1a305be2-06f2-4be2-ab10-bbb84f53d2ca,790b10df,vehicle-detection,Gate 2.9,12:14:51,53.0,00:00:53,,806,,,Van crossing gate2.9 (out)
+4ff15653-6ce4-4d62-bfa6-7187b2af9980,790b10df,vehicle-track,Gate 2.9,12:14:51,53.0,00:00:53,,798,,,"Car #35 first seen at 53.0s, last seen at 54.0s"
+35c8dc01-32d4-4832-893f-29b1505a275b,790b10df,vehicle-track,Gate 2.9,12:14:51,55.0,00:00:55,,835,,,"Tricycle #36 first seen at 55.0s, last seen at 65.0s"
+6b59ddff-ccd3-4bfb-996e-bec541a2a48b,790b10df,vehicle-detection,Gate 2.9,12:14:51,56.0,00:00:56,,852,,,Car crossing gate2.9 (out)
+94e829c7-090f-462b-a342-62342fce0e0b,790b10df,vehicle-detection,Gate 2.9,12:14:51,56.0,00:00:56,,840,,,Car crossing gate2.9 (out)
+ea5af033-1585-49a5-bc92-550aaf6c724c,790b10df,vehicle-track,Gate 2.9,12:14:51,56.0,00:00:56,,853,,,"Tricycle #37 first seen at 56.0s, last seen at 57.0s"
+1fb195ca-e8b1-44c2-a75c-3c0271a8f5d4,790b10df,vehicle-detection,Gate 2.9,12:14:51,57.0,00:00:57,,867,,,Car crossing gate2.9 (out)
+7a8b7d53-5e0f-44c6-b55b-c7ca6edc5019,790b10df,vehicle-track,Gate 2.9,12:14:51,57.0,00:00:57,,868,,,"Car #38 first seen at 57.0s, last seen at 78.0s"
+d93c61c2-bd06-4289-a88e-02fd30c50c51,790b10df,vehicle-detection,Gate 2.9,12:14:51,60.0,00:01:00,,910,,,Car crossing gate2.9 (out)
+46c6fbc5-021a-4482-9c27-51c9d5fdb943,790b10df,vehicle-track,Gate 2.9,12:14:51,61.0,00:01:01,,916,,,"Motorcycle #39 first seen at 61.0s, last seen at 65.0s"
+d9c3f665-6b58-4e46-a225-d83446c34bc1,790b10df,vehicle-detection,Gate 2.9,12:14:51,61.0,00:01:01,,924,,,Car crossing gate2.9 (out)
+72c15193-8cd1-4a47-b661-0adf1d725220,790b10df,vehicle-track,Gate 2.9,12:14:51,62.0,00:01:02,,938,,,"Motorcycle #40 first seen at 62.0s, last seen at 66.0s"
+e726bae4-d8e9-4e44-a373-0ef40c68f0ce,790b10df,vehicle-detection,Gate 2.9,12:14:51,63.0,00:01:03,,957,,,Motorcycle crossing gate2.9 (out)
+0fd3dc46-fe5a-4c8b-969e-406e3df6ffb5,790b10df,vehicle-detection,Gate 2.9,12:14:51,64.0,00:01:04,,968,,,Tricycle crossing gate2.9 (out)
+56b77b27-288c-4dfa-b9c0-7c401188b062,790b10df,vehicle-track,Gate 2.9,12:14:51,64.0,00:01:04,,966,,,"Car #41 first seen at 64.0s, last seen at 80.0s"
+b39b369e-701d-45b3-a15a-97b07f825dc6,790b10df,vehicle-detection,Gate 2.9,12:14:51,64.0,00:01:04,,967,,,Motorcycle crossing gate2.9 (out)
+8efc235e-c6bc-409b-9b9e-13eac44239a4,790b10df,vehicle-detection,Gate 2.9,12:14:51,65.0,00:01:05,,986,,,Motorcycle crossing gate2.9 (out)
+b3059584-d3a9-4b9b-a8e4-903ffa445590,790b10df,vehicle-detection,Gate 2.9,12:14:51,65.0,00:01:05,,988,,,Motorcycle crossing gate2.9 (out)
+39f6577f-6619-4c47-870c-2601c2ac764c,790b10df,vehicle-detection,Gate 2.9,12:14:51,66.0,00:01:06,,997,,,Car crossing gate2.9 (out)
+936c60a1-93f9-4754-8616-02a18cc1618e,790b10df,vehicle-detection,Gate 2.9,12:14:51,67.0,00:01:07,,1017,,,Car crossing gate2.9 (out)
+d823e3d6-89ef-46a0-877a-a1ba78371fb7,790b10df,vehicle-track,Gate 2.9,12:14:51,67.0,00:01:07,,1007,,,"Car #42 first seen at 67.0s, last seen at 67.0s"
+4afca58a-07b7-4f80-92f6-b4b62f85bdc2,790b10df,vehicle-detection,Gate 2.9,12:14:51,69.0,00:01:09,,1049,,,Car crossing gate2.9 (out)
+9de0f6d8-59dd-40b9-9376-0e7ddd9f3e0f,790b10df,vehicle-detection,Gate 2.9,12:14:51,72.0,00:01:12,,1083,,,Car crossing gate2.9 (out)
+97b3361a-d530-414c-bc82-62ae8dfaf81d,790b10df,vehicle-detection,Gate 2.9,12:14:51,74.0,00:01:14,,1112,,,Car crossing gate2.9 (out)
+0b6d4032-6e60-4959-a16d-ffdb305b43b3,790b10df,vehicle-track,Gate 2.9,12:14:51,75.0,00:01:15,,1128,,,"Car #43 first seen at 75.0s, last seen at 85.0s"
+e7d41033-da01-427b-8cce-75c2e741c3da,790b10df,vehicle-detection,Gate 2.9,12:14:51,75.0,00:01:15,,1134,,,Car crossing gate2.9 (out)
+5d9a4eb5-9cc2-4c4e-b126-c63d249f3ae2,790b10df,vehicle-detection,Gate 2.9,12:14:51,77.0,00:01:17,,1162,,,Car crossing gate2.9 (out)
+23f97e53-354a-43e1-bc20-3d17bda3d790,790b10df,vehicle-detection,Gate 2.9,12:14:51,78.0,00:01:18,,1181,,,Car crossing gate2.9 (out)
+6625151a-e3f5-47fb-a133-2b6787344e9f,790b10df,vehicle-detection,Gate 2.9,12:14:51,80.0,00:01:20,,1206,,,Car crossing gate2.9 (out)
+64daa3d0-5ee7-4e1d-8759-3f78db2748de,790b10df,vehicle-detection,Gate 2.9,12:14:51,85.0,00:01:25,,1278,,,Car crossing gate2.9 (out)
