@@ -341,8 +341,12 @@ class VehicleSummary(BaseModel):
     totalVehicles: int = 0
     totalGates: int = 0
     averageVcRatio: Optional[float] = None
+    averageLos: Optional[VehicleLOS] = None
     dominantLos: Optional[VehicleLOS] = None
     perGateLos: list[VehicleGateLOS] = Field(default_factory=list)
+    timeRange: Optional[str] = None
+    startTime: Optional[str] = None
+    windowHours: Optional[float] = None
 
 
 class VehicleTrafficResponse(BaseModel):

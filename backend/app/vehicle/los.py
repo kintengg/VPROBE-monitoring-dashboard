@@ -45,6 +45,13 @@ PCE_MULTIPLIERS: dict[str, float] = {
 
 JAM_DENSITY_VEH_PER_KM_PER_LANE: float = 145.0
 
+# HCM 2010 arterial saturation flow rate per lane (vehicles/hour/lane).
+# Used by the dashboard to compare bucketed crossing volume against a flow
+# capacity rather than a static jam-density occupancy. compute_capacity()
+# (jam-density) is still correct for the per-frame realtime overlay where
+# both volume and capacity are instantaneous counts.
+HCM_PER_LANE_HOURLY_CAPACITY: float = 1900.0
+
 
 def get_los(vc_ratio: Optional[float]) -> Optional[str]:
     """Return the LOS letter grade for a V/C ratio, or None if input is None."""
@@ -87,8 +94,22 @@ def compute_volume(class_counts: Mapping[str, int]) -> float:
 
 
 def compute_capacity(road_length_km: float, num_lanes: int, jam_density: float = JAM_DENSITY_VEH_PER_KM_PER_LANE) -> float:
-    """N_max = N_lanes * L * k_j (HCM jam-density formulation)."""
+    """Jam-density occupancy capacity: N_max = N_lanes * L * k_j.
+
+    Use this only when comparing against an *instantaneous* vehicle count
+    (e.g., the per-frame realtime overlay drawn by RT-DETR). For bucketed
+    flow-volume V/C ratios in the dashboard, use compute_flow_capacity().
+    """
     return max(0.0, float(num_lanes)) * max(0.0, float(road_length_km)) * float(jam_density)
+
+
+def compute_flow_capacity(num_lanes: int, hours: float = 1.0, per_lane_hourly: float = HCM_PER_LANE_HOURLY_CAPACITY) -> float:
+    """Flow capacity over a window of `hours`: lanes * 1900 PCU/h/lane * hours.
+
+    Suitable for V/C ratios where the numerator is a count of crossings
+    accumulated over the same time window (i.e., a flow, not an occupancy).
+    """
+    return max(0.0, float(num_lanes)) * float(per_lane_hourly) * max(0.0, float(hours))
 
 
 def compute_vc_ratio(class_counts: Mapping[str, int], capacity: float) -> Optional[float]:

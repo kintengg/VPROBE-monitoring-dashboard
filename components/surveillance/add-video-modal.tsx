@@ -18,7 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
 import { FileVideo, Upload, Video, X } from "lucide-react"
 import { getCountingConfigChoices, uploadInferenceRequirement } from "@/lib/api"
 
@@ -207,7 +206,6 @@ interface AddVideoModalProps {
     roadLengthM?: number
     laneCount?: number
     countingConfig?: string
-    showLivePreview?: boolean
   }) => void | Promise<void>
 }
 
@@ -219,7 +217,6 @@ interface LastVideoFormValues {
   startSecond: string
   startMeridiem: string
   selectedCountingConfig: string
-  showLivePreview: boolean
 }
 
 interface LastGateLosValues {
@@ -262,7 +259,6 @@ function readLastVideoFormValues(): LastVideoFormValues | null {
       startSecond: typeof parsed.startSecond === "string" ? parsed.startSecond : "",
       startMeridiem: parsed.startMeridiem === "AM" || parsed.startMeridiem === "PM" ? parsed.startMeridiem : "",
       selectedCountingConfig: typeof parsed.selectedCountingConfig === "string" ? parsed.selectedCountingConfig : "",
-      showLivePreview: Boolean(parsed.showLivePreview),
     }
   } catch {
     return null
@@ -371,7 +367,6 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
   const [isLoadingCountingOptions, setIsLoadingCountingOptions] = useState(false)
   const [isUploadingCountingConfig, setIsUploadingCountingConfig] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const [showLivePreview, setShowLivePreview] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -433,7 +428,6 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
       const defaults = resolveGateLosDefaults(selectedLocation)
       setRoadLengthM(defaults.roadLengthM)
       setLaneCount(defaults.laneCount)
-      setShowLivePreview(Boolean(savedValues?.showLivePreview))
       if (savedValues?.selectedCountingConfig) {
         setSelectedCountingConfig(savedValues.selectedCountingConfig)
       }
@@ -484,9 +478,8 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
       startSecond,
       startMeridiem,
       selectedCountingConfig,
-      showLivePreview,
     })
-  }, [date, locationId, open, selectedCountingConfig, showLivePreview, startHour, startMeridiem, startMinute, startSecond])
+  }, [date, locationId, open, selectedCountingConfig, startHour, startMeridiem, startMinute, startSecond])
 
   useEffect(() => {
     if (!locationId || countingOptions.length === 0) {
@@ -680,7 +673,6 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
         roadLengthM: parsedRoadLengthM,
         laneCount: parsedLaneCount,
         countingConfig: isPedestrian ? undefined : selectedCountingConfig,
-        showLivePreview,
       })
       handleClose()
     } catch (error) {
@@ -696,7 +688,6 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
     setSubmitError(null)
     setIsLoadingCountingOptions(false)
     setIsUploadingCountingConfig(false)
-    setShowLivePreview(false)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -1089,20 +1080,6 @@ export function AddVideoModal({ open, onOpenChange, locations, initialLocationId
             </div>
           </div>
 
-          <div className="rounded-xl border border-border bg-secondary/40 p-3">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Video className="h-4 w-4 text-primary" />
-                  Live Preview Window
-                </div>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Show RT-DETR live frames in an OpenCV window while processing. Turn off to run fully in background.
-                </p>
-              </div>
-              <Switch checked={showLivePreview} onCheckedChange={setShowLivePreview} disabled={isSubmitting} className="data-[state=checked]:bg-primary" />
-            </div>
-          </div>
         </div>
 
         {submitError && (

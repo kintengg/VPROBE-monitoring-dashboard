@@ -12,6 +12,10 @@ export function VehicleKpiCards({ summary }: VehicleKpiCardsProps) {
   const inCount = (summary?.perGateLos ?? []).filter((r) => r.flowGroup === "In").reduce((acc, r) => acc + r.vehicleCount, 0)
   const outCount = (summary?.perGateLos ?? []).filter((r) => r.flowGroup === "Out").reduce((acc, r) => acc + r.vehicleCount, 0)
   const avgVc = summary?.averageVcRatio
+  // Average LOS = mean V/C across gates → mapped to a letter. Dominant LOS
+  // is the worst grade seen on any active gate. Both reflect the selected
+  // time window (vehicle_summary is window-aware).
+  const averageLos = summary?.averageLos ?? null
   const dominant = summary?.dominantLos
 
   const cards: Array<{
@@ -43,9 +47,9 @@ export function VehicleKpiCards({ summary }: VehicleKpiCardsProps) {
       accent: "text-orange-300",
     },
     {
-      label: "Avg V/C · Dominant LOS",
-      value: `${avgVc == null ? "—" : avgVc.toFixed(2)} · ${dominant ?? "—"}`,
-      helper: "Across monitored gates",
+      label: "Average LOS · Worst LOS",
+      value: `${averageLos ?? "—"} · ${dominant ?? "—"}`,
+      helper: avgVc == null ? "Across the selected window" : `Mean V/C ${avgVc.toFixed(2)}`,
       icon: <Gauge className="h-4 w-4" />,
       accent: dominant === "F" || dominant === "E" ? "text-rose-300" : "text-foreground",
     },

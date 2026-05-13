@@ -94,27 +94,68 @@ def _emit(callback: Optional[VehicleProgressCallback], **payload: Any) -> None:
 
 
 def _stream_progress(process: subprocess.Popen[str], callback: Optional[VehicleProgressCallback]) -> None:
-    """Read stderr for tqdm-style progress lines and forward to the callback."""
+    """Read stderr for tqdm-style progress lines and forward to the callback.
+
+    Polls a cancel-check (if `callback.cancel_check` is attached) at ~10 Hz
+    via `select` so the subprocess can be terminated quickly even when
+    RT-DETR has gone quiet (e.g., during model load). Cancellation
+    terminates the subprocess and re-raises so the upload thread settles
+    the queue entry as "cancelled".
+    """
+    import select
+
     progress_re = re.compile(r"(\d+)%\|.*?\|\s*(\d+)/(\d+)")
     if process.stderr is None:
         return
+    cancel_check = getattr(callback, "cancel_check", None) if callback is not None else None
     last_percent = -1
-    for raw_line in iter(process.stderr.readline, ""):
-        line = raw_line.rstrip()
-        if not line:
-            continue
-        match = progress_re.search(line)
-        if not match:
-            continue
-        percent = int(match.group(1))
-        if percent != last_percent:
-            last_percent = percent
-            _emit(
-                callback,
-                phase="tracking",
-                progressPercent=min(94, max(5, int(percent * 0.9) + 5)),
-                message=f"RT-DETR processing… frame {match.group(2)}/{match.group(3)}",
-            )
+    stderr_fd = process.stderr.fileno()
+
+    def _terminate() -> None:
+        try:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        except Exception:
+            pass
+
+    try:
+        while True:
+            if callable(cancel_check):
+                cancel_check()  # raises InterruptedError when the user clicks cancel
+            if process.poll() is not None:
+                # Drain any remaining stderr after the subprocess exits.
+                for raw_line in process.stderr:
+                    pass  # discard; final state read upstream
+                return
+            # Wait up to 100ms for new stderr output; the short timeout keeps
+            # the cancel check responsive.
+            ready, _, _ = select.select([stderr_fd], [], [], 0.1)
+            if not ready:
+                continue
+            raw_line = process.stderr.readline()
+            if not raw_line:
+                # EOF — subprocess has closed stderr. Loop back to check exit.
+                continue
+            line = raw_line.rstrip()
+            match = progress_re.search(line) if line else None
+            if not match:
+                continue
+            percent = int(match.group(1))
+            if percent != last_percent:
+                last_percent = percent
+                _emit(
+                    callback,
+                    phase="tracking",
+                    progressPercent=min(94, max(5, int(percent * 0.9) + 5)),
+                    message=f"RT-DETR processing… frame {match.group(2)}/{match.group(3)}",
+                )
+    except InterruptedError:
+        _terminate()
+        raise
 
 
 def _parse_counts_csv(csv_path: Path) -> list[dict[str, Any]]:
@@ -331,7 +372,6 @@ def run_vehicle_inference(
     video_record: dict[str, Any],
     *,
     counting_config_name: Optional[str] = None,
-    show_live_preview: bool = False,
     progress_callback: Optional[VehicleProgressCallback] = None,
 ) -> dict[str, Any]:
     """Run RT-DETR inference against a vehicle video.
@@ -391,8 +431,6 @@ def run_vehicle_inference(
     ]
     if counting_config is not None:
         cmd.extend(["--counting-config", str(counting_config)])
-    if show_live_preview:
-        cmd.append("--display")
 
     _emit(
         progress_callback,

@@ -497,8 +497,12 @@ export interface VehicleSummary {
   totalVehicles: number
   totalGates: number
   averageVcRatio: number | null
+  averageLos: VehicleLOS | null
   dominantLos: VehicleLOS | null
   perGateLos: VehicleGateLOS[]
+  timeRange?: string | null
+  startTime?: string | null
+  windowHours?: number | null
 }
 
 export interface VehicleTrafficResponse {
@@ -538,7 +542,6 @@ export interface VideoUploadStatus {
   date?: string | null
   startTime?: string | null
   endTime?: string | null
-  fastMode?: boolean | null
   createdAt?: string | null
   startedAt?: string | null
   completedAt?: string | null
@@ -700,7 +703,6 @@ export function uploadVideo(payload: {
   date: string
   startTime: string
   endTime: string
-  fastMode?: boolean
   countingConfig?: string
   roadLengthM?: number
   laneCount?: number
@@ -713,7 +715,6 @@ export function uploadVideo(payload: {
   formData.set("date", payload.date)
   formData.set("startTime", payload.startTime)
   formData.set("endTime", payload.endTime)
-  formData.set("fastMode", String(Boolean(payload.fastMode)))
   formData.set("uploadId", uploadId)
   if (payload.countingConfig) {
     formData.set("countingConfig", payload.countingConfig)
@@ -729,7 +730,7 @@ export function uploadVideo(payload: {
     uploadId,
     state: "queued",
     progressPercent: 0,
-    message: payload.fastMode ? "Uploading video in fast mode..." : "Uploading video...",
+    message: "Uploading video...",
     phase: "queued",
     updatedAt: new Date().toISOString(),
   })
@@ -960,12 +961,12 @@ export function getVehicleGates() {
   return request<VehicleGate[]>("/api/vehicle/gates")
 }
 
-export function getVehicleSummary(date?: string) {
-  return request<VehicleSummary>(withQuery("/api/vehicle/dashboard/summary", { date }))
+export function getVehicleSummary(date?: string, timeRange?: string, startTime?: string) {
+  return request<VehicleSummary>(withQuery("/api/vehicle/dashboard/summary", { date, timeRange, startTime }))
 }
 
-export function getVehicleLOS(date?: string) {
-  return request<VehicleGateLOS[]>(withQuery("/api/vehicle/dashboard/los", { date }))
+export function getVehicleLOS(date?: string, timeRange?: string, startTime?: string) {
+  return request<VehicleGateLOS[]>(withQuery("/api/vehicle/dashboard/los", { date, timeRange, startTime }))
 }
 
 export function getVehicleClassBreakdown(date?: string) {

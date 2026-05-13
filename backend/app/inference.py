@@ -655,7 +655,6 @@ def run_video_inference(
     video_path: Path,
     model_name: Optional[str] = None,
     video_record: Optional[dict[str, Any]] = None,
-    fast_mode: bool = False,
     progress_callback: Optional[Callable[[dict[str, Any]], None]] = None,
 ) -> dict[str, Any]:
     status = ultralytics_status()
@@ -697,9 +696,6 @@ def run_video_inference(
     tracker_config = _tracker_config_path()
     if tracker_config.exists():
         track_kwargs["tracker"] = str(tracker_config)
-    if fast_mode:
-        track_kwargs["imgsz"] = 512
-        track_kwargs["vid_stride"] = 2
 
     location = (video_record or {}).get("location", "Unknown Location")
     start_timestamp = (video_record or {}).get("timestamp") or (video_record or {}).get("startTime") or "Unknown Time"

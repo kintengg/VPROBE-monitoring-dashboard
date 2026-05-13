@@ -323,7 +323,6 @@ async def upload_video(
     date: str = Form(...),
     startTime: str = Form(...),
     endTime: str = Form(...),
-    fastMode: bool = Form(False),
     uploadId: Optional[str] = Form(None),
     countingConfig: Optional[str] = Form(None),
     roadLengthM: Optional[float] = Form(None),
@@ -364,7 +363,6 @@ async def upload_video(
             date=date,
             start_time=startTime,
             end_time=endTime,
-            fast_mode=fastMode,
         )
 
     try:
@@ -424,7 +422,6 @@ async def upload_video(
                 raw_target,
                 video,
                 counting_config_name=countingConfig,
-                show_live_preview=fastMode,  # fastMode doubles as live-preview flag for vehicle uploads
                 progress_callback=handle_processing_progress,
             )
             ensure_not_cancelled()
@@ -450,7 +447,6 @@ async def upload_video(
                 raw_target,
                 None,
                 video,
-                fastMode,
                 handle_processing_progress,
             )
             ensure_not_cancelled()
@@ -732,14 +728,22 @@ def list_vehicle_gates() -> list[dict[str, Any]]:
 
 
 @app.get("/api/vehicle/dashboard/summary", response_model=schemas.VehicleSummary)
-def get_vehicle_summary(date: Optional[str] = None) -> dict[str, Any]:
-    return vehicle_store.vehicle_summary(date)
+def get_vehicle_summary(
+    date: Optional[str] = None,
+    timeRange: str = "whole-day",
+    startTime: Optional[str] = None,
+) -> dict[str, Any]:
+    return vehicle_store.vehicle_summary(date, timeRange, startTime)
 
 
 @app.get("/api/vehicle/dashboard/los", response_model=list[schemas.VehicleGateLOS])
-def get_vehicle_los(date: Optional[str] = None) -> list[dict[str, Any]]:
-    events = vehicle_store.list_gate_crossing_events(date)
-    return vehicle_store.per_gate_los(events)
+def get_vehicle_los(
+    date: Optional[str] = None,
+    timeRange: str = "whole-day",
+    startTime: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    summary = vehicle_store.vehicle_summary(date, timeRange, startTime)
+    return summary.get("perGateLos", [])
 
 
 @app.get("/api/vehicle/dashboard/class-breakdown", response_model=list[schemas.VehicleClassBreakdown])

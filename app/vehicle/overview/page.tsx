@@ -245,7 +245,6 @@ function VehicleSurveillancePageContent() {
     roadLengthM?: number
     laneCount?: number
     countingConfig?: string
-    showLivePreview?: boolean
   }) => {
     try {
       setPageError(null)
@@ -255,7 +254,6 @@ function VehicleSurveillancePageContent() {
           locationName: locations.find((location) => location.id === upload.locationId)?.name ?? "Unknown location",
           domain: "vehicle",
           endTime: upload.startTime, // Sourced modal does not collect endTime
-          fastMode: upload.showLivePreview ?? false,
         },
       ])
     } catch (error) {

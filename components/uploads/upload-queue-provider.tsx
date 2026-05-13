@@ -26,7 +26,6 @@ export interface EnqueuedUploadInput {
   date: string
   startTime: string
   endTime: string
-  fastMode: boolean
   domain?: "pedestrian" | "vehicle"
   countingConfig?: string
   roadLengthM?: number
@@ -44,7 +43,6 @@ export interface UploadQueueItem {
   date: string
   startTime: string
   endTime: string
-  fastMode: boolean
   countingConfig: string | null
   roadLengthM?: number
   laneCount?: number
@@ -157,14 +155,13 @@ function createQueuedItem(input: EnqueuedUploadInput): UploadQueueItem {
     date: input.date,
     startTime: input.startTime,
     endTime: input.endTime,
-    fastMode: input.fastMode,
     countingConfig: input.countingConfig ?? null,
     roadLengthM: input.roadLengthM,
     laneCount: input.laneCount,
     uploadId: null,
     state: "queued",
     progressPercent: 0,
-    message: input.fastMode ? "Waiting to upload in fast mode..." : "Waiting to upload...",
+    message: "Waiting to upload...",
     phase: "queued",
     videoId: null,
     error: null,
@@ -195,7 +192,6 @@ function createUploadFromHistory(status: VideoUploadStatus): UploadQueueItem {
     date: status.date ?? "",
     startTime: status.startTime ?? "",
     endTime: status.endTime ?? "",
-    fastMode: Boolean(status.fastMode),
     countingConfig: null,
     uploadId: status.uploadId,
     state: status.state,
@@ -241,7 +237,6 @@ function mergeUploadsWithHistory(currentUploads: UploadQueueItem[], history: Vid
       date: upload.date || historyStatus.date || upload.date,
       startTime: upload.startTime || historyStatus.startTime || upload.startTime,
       endTime: upload.endTime || historyStatus.endTime || upload.endTime,
-      fastMode: upload.fastMode || Boolean(historyStatus.fastMode),
       createdAt: upload.createdAt || historyStatus.createdAt || upload.updatedAt,
       startedAt: upload.startedAt ?? historyStatus.startedAt ?? (historyStatus.state === "queued" ? null : historyStatus.updatedAt),
       completedAt: isTerminalState(historyStatus.state)
@@ -300,7 +295,6 @@ function restoreUpload(value: unknown): UploadQueueItem | null {
     date: upload.date,
     startTime: upload.startTime,
     endTime: upload.endTime,
-    fastMode: Boolean(upload.fastMode),
     countingConfig: typeof upload.countingConfig === "string" ? upload.countingConfig : null,
     uploadId: typeof upload.uploadId === "string" ? upload.uploadId : null,
     state: upload.state,
@@ -585,7 +579,7 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
         ...current,
         startedAt: current.startedAt ?? startedAt,
         updatedAt: startedAt,
-        message: current.fastMode ? "Preparing fast upload..." : "Preparing upload...",
+        message: "Preparing upload...",
       }))
 
       try {
@@ -595,7 +589,6 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
           date: queuedUpload.date,
           startTime: queuedUpload.startTime,
           endTime: queuedUpload.endTime,
-          fastMode: queuedUpload.fastMode,
           countingConfig: queuedUpload.countingConfig ?? undefined,
           roadLengthM: queuedUpload.roadLengthM,
           laneCount: queuedUpload.laneCount,

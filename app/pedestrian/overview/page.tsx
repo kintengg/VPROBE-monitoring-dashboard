@@ -230,7 +230,6 @@ function SurveillancePageContent() {
     roadLengthM?: number
     laneCount?: number
     countingConfig?: string
-    showLivePreview?: boolean
   }) => {
     try {
       setPageError(null)
@@ -239,7 +238,7 @@ function SurveillancePageContent() {
           ...upload,
           locationName: locations.find((location) => location.id === upload.locationId)?.name ?? "Unknown location",
           endTime: upload.startTime, // Sourced modal does not collect endTime
-          fastMode: false,
+          domain: "pedestrian",
         },
       ])
     } catch (error) {

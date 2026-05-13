@@ -12,8 +12,10 @@ zero/empty state cleanly.
 
 from __future__ import annotations
 
+import csv
 import re
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, Iterable, Optional
 
 from . import store
 from .vehicle import gates as gate_registry
@@ -113,46 +115,35 @@ def class_breakdown(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return breakdown
 
 
-def per_gate_los(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Aggregate detections per gate, compute V/C and LOS using gate defaults."""
+def per_gate_los(
+    events: list[dict[str, Any]],
+    *,
+    congestion_samples: Optional[dict[str, list[tuple[int, float, Optional[str]]]]] = None,
+) -> list[dict[str, Any]]:
+    """Aggregate per-gate LOS using per-frame V/C from RT-DETR's congestion
+    sidecar so the dashboard agrees with the in-video LOS overlay.
+
+    `events` is still used to count crossings (vehicleCount). `congestion_samples`
+    is the output of :func:`collect_congestion_samples` for the same time
+    window. If samples aren't supplied (e.g., legacy callers), V/C and LOS
+    fall back to None for that gate.
+    """
     gates = gate_registry.list_gates()
-    locations = store.load_state().get("locations", [])
+    samples = congestion_samples or {}
     rows: list[dict[str, Any]] = []
     for gate in gates:
-        location_override = next(
-            (
-                loc
-                for loc in locations
-                if loc.get("id") == gate["id"]
-                or gate_registry.normalize_gate_name(loc.get("name") or "") == gate["normalizedName"]
-            ),
-            None,
-        )
-        road_length_km = gate.get("defaultRoadLengthKm", 0.0)
-        lane_count = gate.get("defaultLaneCount")
-        if location_override is not None:
-            road_length_m = location_override.get("roadLengthM")
-            if isinstance(road_length_m, (int, float)) and road_length_m > 0:
-                road_length_km = float(road_length_m) / 1000.0
-            lane_override = location_override.get("laneCount")
-            if isinstance(lane_override, (int, float)) and lane_override > 0:
-                lane_count = int(round(lane_override))
         gate_events = [
             event for event in events
             if gate_registry.normalize_gate_name(event.get("gateName") or event.get("locationName") or "")
                == gate["normalizedName"]
         ]
         counts = los_module.aggregate_class_counts(gate_events, class_field="vehicleClass")
-        num_videos = len({e.get("videoId") for e in gate_events if e.get("videoId")})
-        if num_videos > 1:
-            counts = {k: int(round(v / num_videos)) for k, v in counts.items()}
-        capacity = los_module.compute_capacity(
-            road_length_km,
-            int(lane_count or 0),
-        )
         volume = los_module.compute_volume(counts)
-        vc_ratio = los_module.compute_vc_ratio(counts, capacity) if capacity > 0 else None
-        grade = los_module.get_los(vc_ratio)
+
+        gate_samples = samples.get(gate["name"], [])
+        mean_vc = _mean(vc for _, vc, _ in gate_samples) if gate_samples else None
+        grade = los_module.get_los(mean_vc) if mean_vc is not None else None
+
         rows.append(
             {
                 "gateId": gate["id"],
@@ -162,8 +153,10 @@ def per_gate_los(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "longitude": gate["longitude"],
                 "vehicleCount": sum(counts.values()),
                 "volume": volume,
-                "capacity": capacity,
-                "vcRatio": vc_ratio,
+                # Capacity is implicit in per-frame V/C; surface a friendly
+                # sample count instead so callers can spot empty windows.
+                "capacity": float(len(gate_samples)),
+                "vcRatio": mean_vc,
                 "los": grade,
                 "losRank": los_module.los_rank(grade),
                 "losDescription": los_module.los_description(grade),
@@ -172,29 +165,77 @@ def per_gate_los(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
-def vehicle_summary(date: Optional[str] = None) -> dict[str, Any]:
-    # Use gate-crossing events only so vehicle-track 'first seen' events
-    # don't inflate the count.
+def vehicle_summary(
+    date: Optional[str] = None,
+    time_range: str = "whole-day",
+    start_time: Optional[str] = None,
+) -> dict[str, Any]:
+    """Aggregate vehicle summary over the selected day + sub-day window.
+
+    The window is described by `time_range` (e.g., "whole-day", "30m", "1h",
+    "6h", ...) and an optional `start_time` ("HH:MM"). Capacity used for
+    V/C scales with the window length so the resulting LOS reflects the
+    selected gate + time range, not just the whole day.
+    """
     crossing_events = list_gate_crossing_events(date)
-    rows = per_gate_los(crossing_events)
+    window_start_min, window_end_min = _time_range_bounds(time_range, start_time)
+    if window_start_min is not None and window_end_min is not None:
+        window_hours = max(1 / 60.0, (window_end_min - window_start_min) / 60.0)
+        crossing_events = _filter_events_to_window(crossing_events, window_start_min, window_end_min)
+    else:
+        window_hours = 24.0
+
+    congestion_samples = collect_congestion_samples(date, window_start_min, window_end_min)
+    rows = per_gate_los(crossing_events, congestion_samples=congestion_samples)
     total_vehicles = sum(int(row.get("vehicleCount") or 0) for row in rows)
-    avg_vc = None
-    valid_vc = [row["vcRatio"] for row in rows if isinstance(row["vcRatio"], (int, float))]
-    if valid_vc:
-        avg_vc = sum(valid_vc) / len(valid_vc)
+    # "Average V/C" = mean of per-frame V/C across all gates' samples — this
+    # weights time equally rather than letting a single low-traffic gate
+    # bias the dashboard's headline average.
+    all_vc_values = [vc for samples in congestion_samples.values() for _, vc, _ in samples]
+    avg_vc = sum(all_vc_values) / len(all_vc_values) if all_vc_values else None
+    # Average LOS uses the mean V/C across active (non-zero) gates and maps
+    # the result to a single grade — matches the dashboard's "Average LOS" tile.
+    average_los = los_module.get_los(avg_vc) if avg_vc is not None else None
+    # Dominant LOS is the worst grade observed across gates that saw any flow.
     dominant_los: Optional[str] = None
-    if rows:
-        graded = [row["los"] for row in rows if row["los"]]
-        if graded:
-            dominant_los = max(graded, key=lambda g: los_module.los_rank(g))
+    graded = [row["los"] for row in rows if row.get("los") and (row.get("vehicleCount") or 0) > 0]
+    if graded:
+        dominant_los = max(graded, key=lambda g: los_module.los_rank(g))
     return {
         "date": date,
         "totalVehicles": total_vehicles,
         "totalGates": len(rows),
         "averageVcRatio": avg_vc,
+        "averageLos": average_los,
         "dominantLos": dominant_los,
         "perGateLos": rows,
+        "timeRange": time_range,
+        "startTime": start_time,
+        "windowHours": window_hours,
     }
+
+
+def _filter_events_to_window(
+    events: list[dict[str, Any]],
+    window_start_min: int,
+    window_end_min: int,
+) -> list[dict[str, Any]]:
+    state = store.load_state()
+    video_start_by_id = {
+        str(video.get("id")): str(video.get("startTime") or video.get("timestamp") or "")
+        for video in state.get("videos", [])
+    }
+    kept: list[dict[str, Any]] = []
+    for event in events:
+        offset_seconds = float(event.get("offsetSeconds") or 0)
+        clock = video_start_by_id.get(str(event.get("videoId"))) or str(event.get("timestamp") or "00:00")
+        start_min = _parse_time_to_minutes(clock)
+        if start_min is None:
+            continue
+        total_minutes = start_min + int(offset_seconds) // 60
+        if window_start_min <= total_minutes < window_end_min:
+            kept.append(event)
+    return kept
 
 
 def ensure_gate_locations_seeded() -> int:
@@ -326,6 +367,123 @@ def _time_range_bounds(time_range: str, start_time: "Optional[str]") -> "tuple[O
     return start_minutes, start_minutes + window_minutes
 
 
+# ---------------------------------------------------------------------------
+# Per-frame congestion-CSV aggregation.
+#
+# RT-DETR writes a `<video_stem>_congestion.csv` next to each annotated video
+# with one row per processed frame: timestamp (relative), V/C ratio, and LOS
+# letter (computed against jam-density capacity in the realtime estimator).
+# Aggregating these rows across the dashboard's selected window gives the
+# *same* LOS distribution the in-video overlay shows, so the dashboard and
+# the video playback agree.
+# ---------------------------------------------------------------------------
+
+
+def _congestion_csv_for_video(video: dict[str, Any]) -> Optional[Path]:
+    processed = video.get("processedPath")
+    if not processed:
+        return None
+    path = Path(processed)
+    if not path.is_absolute():
+        path = store.BACKEND_DIR / path
+    candidate = path.with_suffix("")
+    candidate = candidate.parent / f"{candidate.name}_congestion.csv"
+    return candidate if candidate.exists() else None
+
+
+def _absolute_minute_from_csv_timestamp(timestamp: str, video_start_min: int) -> Optional[int]:
+    """Convert a `HH:MM:SS` offset from a congestion row to an absolute minute-of-day."""
+    parts = timestamp.strip().split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        seconds = int(parts[2])
+    except ValueError:
+        return None
+    offset_minutes = hours * 60 + minutes + (seconds // 60)
+    return video_start_min + offset_minutes
+
+
+def _gate_name_for_video(
+    video: dict[str, Any],
+    gate_name_by_normalized: dict[str, str],
+) -> Optional[str]:
+    candidate = video.get("location") or ""
+    normalized = gate_registry.normalize_gate_name(str(candidate))
+    if normalized in gate_name_by_normalized:
+        return gate_name_by_normalized[normalized]
+    # Fall back to the gate registry's loc id alias.
+    location_id = str(video.get("locationId") or "")
+    for gate in gate_registry.list_gates():
+        if gate["id"] == location_id:
+            return gate["name"]
+    return None
+
+
+def collect_congestion_samples(
+    date: Optional[str],
+    window_start_min: Optional[int],
+    window_end_min: Optional[int],
+    gate_id: Optional[str] = None,
+) -> dict[str, list[tuple[int, float, Optional[str]]]]:
+    """Walk every vehicle video for `date`, parse its congestion CSV, and
+    return a dict keyed by gate name → list of (absolute_minute, V/C, LOS letter)."""
+    state = store.load_state()
+    locations_by_id = {str(loc.get("id")): loc for loc in state.get("locations", [])}
+    gate_name_by_normalized = {g["normalizedName"]: g["name"] for g in gate_registry.list_gates()}
+    target_gate_name: Optional[str] = None
+    if gate_id:
+        target = gate_registry.get_gate(gate_id)
+        target_gate_name = target["name"] if target else None
+
+    samples: dict[str, list[tuple[int, float, Optional[str]]]] = {}
+    for video in state.get("videos", []):
+        if date and str(video.get("date") or "")[:10] != date:
+            continue
+        # Vehicle-only: skip if its location isn't a vehicle gate.
+        loc = locations_by_id.get(str(video.get("locationId")))
+        if loc is not None and loc.get("domain") and loc["domain"] != "vehicle":
+            continue
+        gate_name = _gate_name_for_video(video, gate_name_by_normalized)
+        if gate_name is None:
+            continue
+        if target_gate_name is not None and gate_name != target_gate_name:
+            continue
+        csv_path = _congestion_csv_for_video(video)
+        if csv_path is None:
+            continue
+        video_start_min = _parse_time_to_minutes(str(video.get("startTime") or video.get("timestamp") or ""))
+        if video_start_min is None:
+            continue
+        with csv_path.open("r", newline="") as handle:
+            for row in csv.DictReader(handle):
+                vc_raw = row.get("vc_ratio")
+                if vc_raw in (None, ""):
+                    continue
+                try:
+                    vc = float(vc_raw)
+                except ValueError:
+                    continue
+                abs_min = _absolute_minute_from_csv_timestamp(row.get("timestamp", ""), video_start_min)
+                if abs_min is None:
+                    continue
+                if window_start_min is not None and window_end_min is not None:
+                    if abs_min < window_start_min or abs_min >= window_end_min:
+                        continue
+                los_letter = (row.get("los") or "").strip() or None
+                samples.setdefault(gate_name, []).append((abs_min, vc, los_letter))
+    return samples
+
+
+def _mean(values: Iterable[float]) -> Optional[float]:
+    items = [float(v) for v in values]
+    if not items:
+        return None
+    return sum(items) / len(items)
+
+
 def vehicle_analytics_series(
     date: "Optional[str]" = None,
     time_range: str = "whole-day",
@@ -443,17 +601,12 @@ def vehicle_los_series(
     gate_meta: dict[str, dict[str, Any]] = {}
     for gate in gates:
         loc_override = location_by_gate_id.get(gate["id"])
-        road_length_km = gate.get("defaultRoadLengthKm", 0.0)
         lane_count = gate.get("defaultLaneCount") or 0
         if loc_override:
-            rlm = loc_override.get("roadLengthM")
-            if isinstance(rlm, (int, float)) and rlm > 0:
-                road_length_km = float(rlm) / 1000.0
             lc = loc_override.get("laneCount")
             if isinstance(lc, (int, float)) and lc > 0:
                 lane_count = int(round(lc))
         gate_meta[gate["name"]] = {
-            "road_length_km": road_length_km,
             "lane_count": lane_count,
         }
 
@@ -503,32 +656,38 @@ def vehicle_los_series(
 
         bucket = buckets.setdefault(bucket_key, {})
         gate_bucket = bucket.setdefault(gate_name, {})
-        counts_dict = gate_bucket.setdefault("counts", {})
-        counts_dict[vehicle_class] = counts_dict.get(vehicle_class, 0) + 1
-        videos_set = gate_bucket.setdefault("videos", set())
-        video_id = event.get("videoId")
-        if video_id:
-            videos_set.add(video_id)
+        gate_bucket[vehicle_class] = gate_bucket.get(vehicle_class, 0) + 1
+
+    # Per-bucket LOS comes from per-frame V/C in each video's _congestion.csv,
+    # not from gate-crossing counts. Crossing counts and capacity-by-lane mix
+    # flow with instantaneous occupancy, so we instead aggregate the same
+    # values the realtime overlay uses.
+    samples_by_gate = collect_congestion_samples(date, window_start_min, window_end_min, gate_id=gate_id)
+    # Bucket samples per gate by absolute_minute → bucket_index.
+    vc_by_bucket: dict[str, dict[str, list[float]]] = {}
+    for gate_name, samples in samples_by_gate.items():
+        for abs_min, vc, _los in samples:
+            bucket_index = (abs_min // bucket_minutes) * bucket_minutes
+            bucket_key = f"{bucket_index // 60:02d}:{bucket_index % 60:02d}"
+            vc_by_bucket.setdefault(bucket_key, {}).setdefault(gate_name, []).append(vc)
+            buckets.setdefault(bucket_key, {})
+        all_gate_names.add(gate_name)
 
     sorted_keys = sorted(buckets.keys())
     result = []
     for key in sorted_keys:
         point: dict[str, Any] = {"id": key, "time": key}
         gate_data = buckets[key]
+        gate_vc_data = vc_by_bucket.get(key, {})
         for gate_name in all_gate_names:
-            gate_data_entry = gate_data.get(gate_name, {})
-            counts = gate_data_entry.get("counts", {})
-            num_videos = len(gate_data_entry.get("videos", set()))
-            if num_videos > 1:
-                counts = {k: int(round(v / num_videos)) for k, v in counts.items()}
-            meta = gate_meta.get(gate_name, {"road_length_km": 0.0, "lane_count": 0})
-            capacity = los_module.compute_capacity(
-                meta["road_length_km"], meta["lane_count"]
-            )
-            vc_ratio = los_module.compute_vc_ratio(counts, capacity) if capacity > 0 else None
-            grade = los_module.get_los(vc_ratio)
+            counts = gate_data.get(gate_name, {})
+            # Mean V/C for this bucket from per-frame samples; if no
+            # congestion data, leave LOS empty so the chart skips the point.
+            vc_samples = gate_vc_data.get(gate_name, [])
+            mean_vc = sum(vc_samples) / len(vc_samples) if vc_samples else None
+            grade = los_module.get_los(mean_vc) if mean_vc is not None else None
             rank = los_module.los_rank(grade)
-            point[gate_name] = 0
+            point[gate_name] = sum(counts.values())
             point[f"{gate_name}__los"] = grade
             point[f"{gate_name}__losRank"] = rank if rank is not None else 0
         result.append(point)

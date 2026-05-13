@@ -193,7 +193,7 @@ export function QueueItem({ upload, onCancelRequest }: QueueItemProps) {
                 ? "Processing failed"
                 : upload.state === "cancelled"
                   ? "Upload cancelled"
-                  : `${upload.startTime} – ${upload.endTime}${upload.fastMode ? " • Fast mode" : ""}`}
+                  : `${upload.startTime} – ${upload.endTime}`}
             </span>
             <span className={`font-medium ${status.tone} sm:shrink-0 sm:text-right`}>
               {statusText}

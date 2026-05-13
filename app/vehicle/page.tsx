@@ -117,9 +117,10 @@ export default function VehicleDashboardPage() {
     setLoading(true)
     setError(null)
     try {
-      // Core vehicle data
+      // Core vehicle data — summary respects the selected time window so the
+      // "Average LOS" tile and per-gate LOS reflect the chosen sub-day range.
       const [summaryResponse, classResponse, trafficResponse] = await Promise.all([
-        getVehicleSummary(date || undefined),
+        getVehicleSummary(date || undefined, range, start || undefined),
         getVehicleClassBreakdown(date || undefined),
         getVehicleTraffic(date || undefined, range, start, 60),
       ])
