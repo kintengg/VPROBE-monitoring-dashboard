@@ -425,9 +425,7 @@ def run_vehicle_inference(
         "--road-length",
         f"{road_length_km:.6f}",
         "--lanes",
-        str(video_record.get("laneCount") or 2),
-        "--batch",
-        "32",
+        str(video_record.get("laneCount") or 2)
     ]
     if counting_config is not None:
         cmd.extend(["--counting-config", str(counting_config)])
