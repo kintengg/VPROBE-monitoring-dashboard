@@ -6,7 +6,6 @@ import { WalkingLoader } from "@/components/ui/walking-loader"
 
 const DEFAULT_MAX_CONCURRENT_UPLOADS = 2
 const MIN_CONCURRENT_UPLOADS = 1
-const MAX_CONCURRENT_UPLOADS = 16
 const MAX_CONCURRENT_UPLOADS_STORAGE_KEY = "alive-max-concurrent-uploads"
 const UPLOAD_QUEUE_STORAGE_KEY = "alive-upload-queue"
 const REHYDRATION_POLL_INTERVAL_MS = 1_000
@@ -432,7 +431,7 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    setMaxConcurrentUploadsState(Math.max(MIN_CONCURRENT_UPLOADS, Math.min(MAX_CONCURRENT_UPLOADS, parsedValue)))
+    setMaxConcurrentUploadsState(Math.max(MIN_CONCURRENT_UPLOADS, parsedValue))
   }, [])
 
   useEffect(() => {
@@ -485,7 +484,7 @@ export function UploadQueueProvider({ children }: { children: ReactNode }) {
     }
 
     const normalizedValue = Math.round(value)
-    setMaxConcurrentUploadsState(Math.max(MIN_CONCURRENT_UPLOADS, Math.min(MAX_CONCURRENT_UPLOADS, normalizedValue)))
+    setMaxConcurrentUploadsState(Math.max(MIN_CONCURRENT_UPLOADS, normalizedValue))
   }, [])
 
   useEffect(() => {

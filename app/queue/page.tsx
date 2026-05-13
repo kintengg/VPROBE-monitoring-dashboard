@@ -81,13 +81,18 @@ export default function QueuePage() {
                 >
                   -
                 </Button>
-                <span className="min-w-6 text-center text-sm font-semibold text-white">{maxConcurrentUploads}</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={maxConcurrentUploads}
+                  onChange={(e) => setMaxConcurrentUploads(parseInt(e.target.value, 10) || 1)}
+                  className="w-12 bg-transparent text-center text-sm font-semibold text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   className="h-7 w-7 rounded-md p-0"
-                  disabled={maxConcurrentUploads >= 16}
                   onClick={() => setMaxConcurrentUploads(maxConcurrentUploads + 1)}
                 >
                   +
@@ -156,13 +161,18 @@ export default function QueuePage() {
               >
                 -
               </Button>
-              <span className="min-w-6 text-center text-sm font-semibold text-white">{maxConcurrentUploads}</span>
+              <input
+                type="number"
+                min="1"
+                value={maxConcurrentUploads}
+                onChange={(e) => setMaxConcurrentUploads(parseInt(e.target.value, 10) || 1)}
+                className="w-12 bg-transparent text-center text-sm font-semibold text-white outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="h-7 w-7 rounded-md p-0"
-                disabled={maxConcurrentUploads >= 16}
                 onClick={() => setMaxConcurrentUploads(maxConcurrentUploads + 1)}
               >
                 +
