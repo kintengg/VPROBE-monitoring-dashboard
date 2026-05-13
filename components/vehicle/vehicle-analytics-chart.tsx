@@ -567,22 +567,6 @@ export function VehicleAnalyticsChart({
         </div>
       )}
 
-      {isLosMetric && data.length > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border pt-4 text-xs text-muted-foreground">
-          <span className="font-medium uppercase tracking-wider text-[10px]">LOS</span>
-          {(["A", "B", "C", "D", "E", "F"] as const).map((grade) => (
-            <span key={grade} className="inline-flex items-center gap-1.5">
-              <span
-                aria-hidden="true"
-                className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{ backgroundColor: LOS_COLOR_MAP[grade] }}
-              />
-              <span className="text-foreground">{grade}</span>
-            </span>
-          ))}
-        </div>
-      )}
-
       {canZoomIn && data.length > 0 && (
         <div className="mt-4 flex items-center gap-2 rounded-2xl border border-border/70 bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
           <ZoomIn className="h-4 w-4" />

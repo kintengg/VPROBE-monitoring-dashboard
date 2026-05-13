@@ -408,7 +408,7 @@ export default function VehicleDashboardPage() {
               onResetZoom={handleResetZoom}
               chartType={losChartType}
               onChartTypeChange={setLosChartType}
-              useLosLineColors={true}
+              useLosLineColors={false}
             />
           </div>
 
@@ -453,7 +453,7 @@ export default function VehicleDashboardPage() {
             chartType={allGatesLosChartType}
             onChartTypeChange={setAllGatesLosChartType}
             legendPosition="top"
-            useLosLineColors={true}
+            useLosLineColors={false}
           />
 
           {/* Row 4: In/Out chart – at the end */}
