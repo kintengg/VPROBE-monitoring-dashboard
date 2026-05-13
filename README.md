@@ -1,35 +1,125 @@
-# v0-build-surveillance-system
+# VPROBE — AI-Powered Video Surveillance Dashboard
 
-This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
+A real-time video management and analytics system for pedestrian and vehicle monitoring, built on Next.js and FastAPI with deep learning inference via Ultralytics models.
 
-## Built with v0
+## Features
 
-This repository is linked to a [v0](https://v0.app) project. You can continue developing by visiting the link below -- start new chats to make changes, and v0 will push commits directly to this repo. Every merge to `main` will automatically deploy.
+- **Unified Dashboard** — Real-time level-of-service (LOS) map, traffic counts, occlusion tracking, and AI-generated event summaries
+- **Vehicle Monitoring** — Gate-level vehicle counts, speed estimation, and per-location analytics
+- **Pedestrian Surveillance** — Multi-camera pedestrian tracking, queue detection, and flow analysis
+- **Video Management** — Upload, playback, and search across surveillance footage with thumbnail generation
+- **AI-Powered Search** — Semantic video search using natural language queries
+- **Model Management** — Upload and switch between object detection models at runtime
 
-[Continue working on v0 →](https://v0.app/chat/projects/prj_nsVMvzEhSjJ8KFbiyZfOh0G4NSiB)
+## Tech Stack
+
+| Layer    | Technology                                      |
+| -------- | ----------------------------------------------- |
+| Frontend | [Next.js 16](https://nextjs.org), React 19, Tailwind CSS 4, shadcn/ui, Leaflet |
+| Backend  | [FastAPI](https://fastapi.tiangolo.com), Uvicorn, Python 3 |
+| ML/AI    | Ultralytics RT-DETR, ByteTrack, YOLO |
+| Storage  | Local filesystem (`backend/storage/`)           |
+
+## Project Structure
+
+```
+├── app/                  # Next.js frontend (App Router)
+│   ├── pedestrian/       # Pedestrian surveillance pages
+│   ├── vehicle/          # Vehicle monitoring pages
+│   ├── queue/            # Queue analysis pages
+│   ├── video/            # Video management pages
+│   ├── search/           # Semantic search pages
+│   └── models/           # Model management pages
+├── components/           # Shared React components (shadcn/ui)
+├── lib/                  # API client, hooks, utilities
+├── hooks/                # Custom React hooks
+├── backend/              # FastAPI backend
+│   └── app/
+│       ├── main.py       # API routes & application entry point
+│       ├── inference.py  # Pedestrian detection inference
+│       ├── vehicle_inference.py  # Vehicle detection inference
+│       ├── store.py      # Pedestrian data store
+│       ├── vehicle_store.py      # Vehicle data store
+│       ├── gemini.py     # AI synthesis integration
+│       └── schemas.py    # Pydantic models
+├── requirements.txt      # Python dependencies
+├── package.json          # Node.js dependencies (pnpm)
+└── tmp/                  # Temporary/example scripts
+```
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- **Node.js** ≥ 18
+- **pnpm** (install via `npm install -g pnpm`)
+- **Python** ≥ 3.10
+
+### Quick Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
+chmod +x setup.sh run.sh
+./setup.sh
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This installs frontend dependencies, creates a Python virtual environment, and installs all Python packages.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Manual Setup
 
-## Learn More
+```bash
+# Frontend
+pnpm install
 
-To learn more, take a look at the following resources:
+# Backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [v0 Documentation](https://v0.app/docs) - learn about v0 and how to use it.
+### Configuration
 
-<a href="https://v0.app/chat/api/kiro/clone/CornOnTheKob/v0-build-surveillance-system" alt="Open in Kiro"><img src="https://pdgvvgmkdvyeydso.public.blob.vercel-storage.com/open%20in%20kiro.svg?sanitize=true" /></a>
+Create a `.env.local` file in the project root (or in `backend/`) with the required environment variables:
+
+```
+GOOGLE_PLACES_API_KEY=your_google_places_api_key
+GEMINI_API_KEY=your_gemini_api_key      # Optional, for AI synthesis
+```
+
+### Running
+
+```bash
+./run.sh
+```
+
+This starts both services:
+- **Frontend** — [http://localhost:3000](http://localhost:3000)
+- **Backend** — [http://localhost:8000](http://localhost:8000)
+
+To run manually:
+
+```bash
+# Terminal 1: Frontend
+pnpm dev
+
+# Terminal 2: Backend
+source venv/bin/activate
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### API Documentation
+
+Once the backend is running, interactive API docs are available at:
+
+- Swagger UI — [http://localhost:8000/docs](http://localhost:8000/docs)
+- Health check — [http://localhost:8000/health](http://localhost:8000/health)
+
+## Storage Layout
+
+```
+backend/storage/
+├── models/              # YOLO/RT-DETR .pt weights
+├── videos/
+│   ├── raw/             # Uploaded source footage
+│   └── processed/       # Rendered detections / tracked exports
+└── exports/             # Reports / downloadable artifacts
+```
