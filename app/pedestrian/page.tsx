@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { KPICards } from "@/components/dashboard/kpi-cards"
 import { PedestrianChart } from "@/components/dashboard/pedestrian-chart"
 import { OcclusionTrendsChart } from "@/components/dashboard/occlusion-trends-chart"
+import { VehicleAnalyticsChart } from "@/components/vehicle/vehicle-analytics-chart"
 import { LocationMap } from "@/components/surveillance/location-map"
 import { useUploadQueue } from "@/components/uploads/upload-queue-provider"
 import { Button } from "@/components/ui/button"
@@ -51,6 +52,7 @@ export default function DashboardPage() {
   const [hourFilter, setHourFilter] = useState("all")
   const [focusTime, setFocusTime] = useState<string | undefined>(undefined)
   const [zoomLevel, setZoomLevel] = useState(0)
+  const [pedestrianLosChartType, setPedestrianLosChartType] = useState<"line" | "bar">("line")
   const [modelDialogOpen, setModelDialogOpen] = useState(false)
   const [modelFile, setModelFile] = useState<File | null>(null)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
@@ -445,6 +447,32 @@ export default function DashboardPage() {
             loading={dashboardLoading}
             onTimeSelect={handleAnalyticsZoom}
             onResetZoom={handleResetZoom}
+          />
+
+          {/* Pedestrian LOS — per-bucket Level of Service derived from the
+              same PTSI score thresholds the video playback uses, so the
+              dashboard and the per-video overlay agree on each bucket's letter. */}
+          <VehicleAnalyticsChart
+            title="Pedestrian LOS"
+            description="Per-bucket Level of Service (A–F) inferred from PTSI scores."
+            timeRange={timeRange}
+            selectedDate={selectedDate}
+            data={(occlusionTrends?.series ?? []) as never}
+            metricKey="los"
+            metricLabel="LOS"
+            seriesColor="#22C55E"
+            bucketMinutes={occlusionTrends?.bucketMinutes ?? 60}
+            zoomLevel={occlusionTrends?.zoomLevel ?? 0}
+            canZoomIn={occlusionTrends?.canZoomIn ?? false}
+            focusTime={occlusionTrends?.focusTime}
+            windowStart={occlusionTrends?.windowStart}
+            windowEnd={occlusionTrends?.windowEnd}
+            loading={dashboardLoading}
+            onTimeSelect={handleAnalyticsZoom}
+            onResetZoom={handleResetZoom}
+            chartType={pedestrianLosChartType}
+            onChartTypeChange={setPedestrianLosChartType}
+            useLosLineColors={false}
           />
         </div>
 

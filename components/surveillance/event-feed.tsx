@@ -102,20 +102,22 @@ export function EventFeed({ filteredVideoId, events = [], loading = false, selec
             ? "Click an event to seek within this recording."
             : `Showing the ${EVENT_FEED_LIMIT} most recent detections. Click to open the relevant footage.`}
         </p>
-        <div className="mt-3">
-          <Select value={selectedVehicleType} onValueChange={setSelectedVehicleType}>
-            <SelectTrigger className="h-8 bg-secondary border-border text-xs text-foreground">
-              <SelectValue placeholder="Filter by vehicle type" />
-            </SelectTrigger>
-            <SelectContent className="bg-card border-border">
-              {vehicleTypeOptions.map((type) => (
-                <SelectItem key={type} value={type} className="text-xs text-foreground">
-                  {type === "all" ? "All vehicle types" : type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {domain !== "pedestrian" && (
+          <div className="mt-3">
+            <Select value={selectedVehicleType} onValueChange={setSelectedVehicleType}>
+              <SelectTrigger className="h-8 bg-secondary border-border text-xs text-foreground">
+                <SelectValue placeholder="Filter by vehicle type" />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                {vehicleTypeOptions.map((type) => (
+                  <SelectItem key={type} value={type} className="text-xs text-foreground">
+                    {type === "all" ? "All vehicle types" : type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto">

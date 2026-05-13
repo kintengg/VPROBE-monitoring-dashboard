@@ -2511,7 +2511,19 @@ def _occlusion_series_from_samples(
         return []
 
     series: list[dict[str, Union[float, str]]] = [
-        {"id": bucket_start.isoformat(), "time": label, "Light": 0.0, "Moderate": 0.0, "Heavy": 0.0}
+        {
+            "id": bucket_start.isoformat(),
+            "time": label,
+            "Light": 0.0,
+            "Moderate": 0.0,
+            "Heavy": 0.0,
+            "ptsiScore": 0.0,
+            "los": "",
+            "losRank": 0,
+            "Pedestrian": 0,
+            "Pedestrian__los": "",
+            "Pedestrian__losRank": 0,
+        }
         for label, bucket_start in buckets
     ]
 
@@ -2521,6 +2533,9 @@ def _occlusion_series_from_samples(
     sample_counts = [0 for _ in series]
     class_totals = [{0: 0.0, 1: 0.0, 2: 0.0} for _ in series]
     label_by_class = {0: "Light", 1: "Moderate", 2: "Heavy"}
+    # Severity weights match the PTSI-style scoring used elsewhere in the codebase:
+    # heavy occlusion dominates, moderate sits in the middle, light is benign.
+    severity_weights = {0: 0.0, 1: 50.0, 2: 100.0}
 
     for sample in samples:
         observed_at = sample["observedAt"]
@@ -2536,8 +2551,59 @@ def _occlusion_series_from_samples(
     for index, point in enumerate(series):
         for class_id, label in label_by_class.items():
             point[label] = round(class_totals[index][class_id] / sample_counts[index], 2) if sample_counts[index] else 0.0
+        # Per-bucket PTSI score = weighted average of occlusion severity. Map
+        # to a LOS letter using the same thresholds as the video playback's
+        # losFromScore() so dashboard and player agree.
+        totals = class_totals[index]
+        bucket_pedestrian_count = totals[0] + totals[1] + totals[2]
+        if bucket_pedestrian_count > 0:
+            score = (
+                severity_weights[0] * totals[0]
+                + severity_weights[1] * totals[1]
+                + severity_weights[2] * totals[2]
+            ) / bucket_pedestrian_count
+        else:
+            score = 0.0
+        letter = _los_letter_from_score(score)
+        point["ptsiScore"] = round(score, 2)
+        point["los"] = letter or ""
+        point["losRank"] = _los_rank_for_letter(letter)
+        # Series-name-friendly aliases for charts that auto-detect per-series
+        # keys (e.g., VehicleAnalyticsChart). One synthetic "Pedestrian" series
+        # so the chart renders a single line with the per-bucket LOS letter.
+        if letter:
+            point["Pedestrian"] = bucket_pedestrian_count
+            point["Pedestrian__los"] = letter
+            point["Pedestrian__losRank"] = _los_rank_for_letter(letter)
 
     return series
+
+
+# LOS thresholds mirror app/video/[id]/page.tsx::losFromScore — kept here so the
+# dashboard and the per-video playback agree on what each PTSI score means.
+_PEDESTRIAN_LOS_THRESHOLDS: tuple[tuple[float, str], ...] = (
+    (15.0, "A"),
+    (33.0, "B"),
+    (50.0, "C"),
+    (66.0, "D"),
+    (85.0, "E"),
+)
+
+
+def _los_letter_from_score(score: float) -> Optional[str]:
+    if not isinstance(score, (int, float)):
+        return None
+    for upper, letter in _PEDESTRIAN_LOS_THRESHOLDS:
+        if score < upper:
+            return letter
+    return "F"
+
+
+def _los_rank_for_letter(letter: Optional[str]) -> int:
+    if not letter:
+        return 0
+    order = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6}
+    return order.get(letter, 0)
 
 
 def _traffic_observations(videos: list[dict[str, Any]], events: list[dict[str, Any]]) -> list[tuple[str, datetime, int]]:
