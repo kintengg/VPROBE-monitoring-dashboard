@@ -321,51 +321,6 @@ def _vehicle_count_from_summary(summary_path: Path, csv_rows: list[dict[str, Any
     return len(csv_rows)
 
 
-def _reencode_to_h264(raw_path: Path, callback: Optional[VehicleProgressCallback] = None) -> Optional[Path]:
-    """Re-encode an OpenCV mp4v video to H.264 so browsers can play it.
-
-    Returns the path of the re-encoded file, or None if ffmpeg is unavailable
-    or the re-encode fails (the caller should fall back to the raw file).
-    """
-    import shutil as _shutil
-
-    ffmpeg = _shutil.which("ffmpeg")
-    if not ffmpeg:
-        return None
-
-    h264_path = raw_path.with_stem(raw_path.stem + "_h264")
-    cmd = [
-        ffmpeg,
-        "-y",  # overwrite without asking
-        "-i", str(raw_path),
-        "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "23",
-        "-movflags", "+faststart",  # enables streaming / progressive download
-        "-an",  # strip audio (inference videos have none)
-        str(h264_path),
-    ]
-
-    _emit(callback, phase="finalizing", progressPercent=96,
-          message="Re-encoding output video to H.264 for browser playback…")
-    try:
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=600,
-        )
-        if result.returncode != 0 or not h264_path.exists():
-            return None
-        # Replace the raw file with the re-encoded one and return the same path.
-        raw_path.unlink(missing_ok=True)
-        h264_path.rename(raw_path)
-        return raw_path
-    except Exception:
-        h264_path.unlink(missing_ok=True)
-        return None
-
 
 def run_vehicle_inference(
     video_path: Path,
@@ -472,10 +427,7 @@ def run_vehicle_inference(
     else:
         vehicle_count = len(track_events) if track_events else _vehicle_count_from_summary(summary_txt, csv_rows)
 
-    # Re-encode to H.264 so the browser's <video> element can play it.
-    # OpenCV's mp4v codec is not natively supported by most browsers.
-    if output_video.exists():
-        _reencode_to_h264(output_video, progress_callback)
+    # Output is already H.264 (written via ffmpeg pipe in the inference script).
 
     processed_relative: Optional[str] = None
     if output_video.exists():
